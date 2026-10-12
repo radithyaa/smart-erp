@@ -1,0 +1,194 @@
+# Smart ERP - DEV OVERLAY for hot reload.
+#
+# Usage:
+#     docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+#   or, via the helper:
+#     ./scripts/smart-erp.sh dev
+#
+# This overlay layers hot reload on top of the default stack WITHOUT changing
+# it. The default (image-baked) flow stays intact for teammates who don't want
+# live editing.
+#
+# Design notes (important):
+#   * We bind-mount ONLY the app source subpaths that get edited (the Python
+#     package and its public/ dir, plus the esbuild tooling). We deliberately
+#     do NOT bind-mount the whole apps/<app> dir, because that would shadow the
+#     image's installed node_modules with the (nonexistent) host one.
+#   * The built assets (public/dist) are regenerated inside the bind-mounted
+#     source tree. public/dist is gitignored upstream, so this does not dirty
+#     the checkout.
+#   * sites/assets is re-pointed at a shared named volume by the custom
+#     entrypoint, so backend build output is served by nginx immediately.
+#   * developer_mode is enabled so Frappe reads assets.json fresh (no cache)
+#     and cache-busts with a timestamp.
+#
+# NOTE: Frappe has no HMR. Frontend changes are rebuilt on save (esbuild
+# watcher) and you refresh the browser. Python changes restart gunicorn
+# (--reload). This is the maximum "live" behaviour Frappe provides without a
+# full `bench start` refactor.
+
+# Individual source bind-mount anchors (compose can't splice a list anchor into
+# a volumes list, so we reference these one by one).
+x-frappe-src: &frappe-src ../apps/frappe/frappe:/home/frappe/frappe-bench/apps/frappe/frappe
+x-frappe-esbuild: &frappe-esbuild ../apps/frappe/esbuild:/home/frappe/frappe-bench/apps/frappe/esbuild
+x-frappe-pkg: &frappe-pkg ../apps/frappe/package.json:/home/frappe/frappe-bench/apps/frappe/package.json
+x-frappe-lock: &frappe-lock ../apps/frappe/yarn.lock:/home/frappe/frappe-bench/apps/frappe/yarn.lock
+x-erpnext-src: &erpnext-src ../apps/erpnext/erpnext:/home/frappe/frappe-bench/apps/erpnext/erpnext
+x-erpnext-pkg: &erpnext-pkg ../apps/erpnext/package.json:/home/frappe/frappe-bench/apps/erpnext/package.json
+x-erpnext-lock: &erpnext-lock ../apps/erpnext/yarn.lock:/home/frappe/frappe-bench/apps/erpnext/yarn.lock
+
+x-sites: &sites sites:/home/frappe/frappe-bench/sites
+x-logs: &logs logs:/home/frappe/frappe-bench/logs
+x-assets: &assets assets:/home/frappe/frappe-bench/assets
+x-entry: &entry ./dev-entrypoint.sh:/home/frappe/frappe-bench/docker-dev-entrypoint.sh:ro
+
+services:
+  backend:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+    command:
+      - bash
+      - -c
+      - >-
+        /home/frappe/frappe-bench/env/bin/gunicorn
+        --chdir=/home/frappe/frappe-bench/sites
+        --bind=0.0.0.0:8000
+        --threads="$${GUNICORN_THREADS:-4}"
+        --workers="$${GUNICORN_WORKERS:-2}"
+        --worker-class=gthread
+        --worker-tmp-dir=/dev/shm
+        --timeout="$${GUNICORN_TIMEOUT:-120}"
+        --reload
+        frappe.app:application
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DEV_SERVER: "1"
+
+  frontend:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    # The base image overrides the entrypoint with nginx-entrypoint.sh (which
+    # envsubst's the nginx template). Since we replaced that entrypoint with
+    # ours, we must run the nginx entrypoint as the command instead.
+    command: ["/usr/local/bin/nginx-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      # nginx serves /assets via the sites/assets symlink chain, which points at
+      # apps/<app>/<app>/public. It must see the SAME bind-mounted sources as
+      # the backend/watcher, otherwise it serves the stale in-image bundles.
+      - *frappe-src
+      - *erpnext-src
+
+  websocket:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+
+  queue-short:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+
+  queue-long:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+
+  scheduler:
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+
+  # esbuild watcher: rebuilds JS/CSS bundles on save, then keeps watching.
+  watch:
+    image: smart-erp-app:local
+    restart: unless-stopped
+    networks:
+      - smart-erp-net
+    entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
+    working_dir: /home/frappe/frappe-bench
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - *sites
+      - *logs
+      - *assets
+      - *entry
+      - *frappe-src
+      - *frappe-esbuild
+      - *frappe-pkg
+      - *frappe-lock
+      - *erpnext-src
+      - *erpnext-pkg
+      - *erpnext-lock
+    command:
+      - bash
+      - -c
+      - >-
+        cd /home/frappe/frappe-bench &&
+        (bench build --apps frappe,erpnext || true) &&
+        exec bench watch --apps frappe,erpnext
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      LIVE_RELOAD: "1"
+
+volumes:
+  assets:
