@@ -49,6 +49,17 @@ fi
 echo "==> Starting application services..."
 $COMPOSE up -d backend websocket queue-short queue-long scheduler frontend
 
+echo "==> Waiting for backend to accept connections..."
+for i in $(seq 1 30); do
+  if $COMPOSE exec -T backend bash -c 'true' >/dev/null 2>&1; then break; fi
+  sleep 2
+done
+
+# Idempotent repairs: DB grant for host '%' + fresh asset manifest.
+# Without these, a fresh device may hit "Access denied" (500) or 404 assets
+# (broken CSS/layout) after the first `up`/rebuild.
+bash scripts/post-up-fix.sh
+
 echo ""
 echo "=========================================================="
 echo " ERPNext is starting."

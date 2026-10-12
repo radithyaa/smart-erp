@@ -63,6 +63,8 @@ git submodule update --init --recursive
 ./scripts/smart-erp.sh logs backend  # lihat log
 ./scripts/smart-erp.sh down          # matikan (data tetap)
 ./scripts/smart-erp.sh build         # rebuild image setelah ubah source
+./scripts/smart-erp.sh fix           # re-apply grant DB + regenerate asset manifest
+./scripts/smart-erp.sh dev           # hot reload (bind-mount source + watcher)
 ./scripts/smart-erp.sh shell         # masuk bash ke container backend
 ./scripts/smart-erp.sh bench <args>  # jalankan bench untuk site
 ./scripts/smart-erp.sh migrate       # migrasi site
@@ -86,25 +88,68 @@ git submodule update --init --recursive
   Untuk perubahan Python saja, cukup restart service terkait:
   `docker compose -f docker/docker-compose.yml restart backend`
 
+## Hot reload (mode dev)
+
+Default stack **tidak** hot reload karena source di-bake ke image (lihat catatan
+di `docker/docker-compose.yml`). Untuk pengembangan yang butuh live edit,
+ada overlay terpisah `docker/docker-compose.dev.yml` yang **tidak mengubah**
+alur default:
+
+```sh
+./scripts/smart-erp.sh dev        # nyalakan dengan hot reload
+./scripts/smart-erp.sh dev-logs   # lihat log watcher esbuild
+./scripts/smart-erp.sh dev-down   # matikan
+```
+
+Apa yang aktif:
+
+- **Frontend (JS/CSS):** source `apps/*/public/**` di-bind-mount. Edit file
+  `.bundle.js` / `.bundle.scss`, service `watch` (esbuild) otomatis
+  meng-compile ulang, lalu **refresh browser**. `developer_mode` membuat Frappe
+  membaca `assets.json` segar tanpa cache.
+- **Backend (Python):** edit `apps/**/*.py`, gunicorn (`--reload`) otomatis
+  me-restart worker. Tidak perlu perintah apa pun.
+
+Catatan penting:
+
+- Frappe **tidak** punya HMR seperti Vite; perubahan frontend butuh refresh
+  browser (opsi `LIVE_RELOAD=1` sudah aktif untuk auto-reload Desk).
+- Bind-mount hanya subpath sumber (`frappe/frappe`, `erpnext/erpnext`, tooling
+  esbuild). `node_modules` tetap dari image agar tidak ter-shadow.
+- Hasil build `public/dist` ditulis ke checkout Anda, tapi sudah ada di
+  `.gitignore` upstream sehingga tidak mengotori git.
+- Kembali ke mode default: `./scripts/smart-erp.sh dev-down` lalu
+  `./scripts/smart-erp.sh up`.
+
 ## Troubleshooting
 
 | Gejala | Sebab | Solusi |
 |--------|-------|--------|
 | **502 Bad Gateway** | nginx menyimpan cache DNS upstream setelah backend restart | `docker compose -f docker/docker-compose.yml restart frontend` |
-| **500 Access denied for user** | user DB ter-grant ke IP container lama | lihat bagian bawah |
+| **500 Access denied for user** | user DB ter-grant ke IP container lama | `./scripts/smart-erp.sh fix` |
+| **CSS/layout rusak (asset 404)** | `sites/assets/assets.json` stale vs bundle hasil rebuild | `./scripts/smart-erp.sh fix` |
 | Build lama / kehabisan disk | image ERPNext besar | `docker system prune -a` |
 
-Perbaikan *Access denied*: user database dibuat dengan host IP tertentu. Buat
-ulang dengan host `%` dan password yang sama seperti di
-`sites/erpnext.localhost/site_config.json`:
+### Dua masalah yang umum: 500 & asset 404
 
-```sh
-docker compose -f docker/docker-compose.yml exec mariadb \
-  mariadb -uroot -padmin -e "
-    CREATE USER IF NOT EXISTS '<db_user>'@'%' IDENTIFIED BY '<db_password>';
-    GRANT ALL PRIVILEGES ON \`<db_name>\`.* TO '<db_user>'@'%';
-    FLUSH PRIVILEGES;"
-```
+Keduanya otomatis diperbaiki oleh **`scripts/post-up-fix.sh`**, dipanggil oleh
+`devcontainer-setup.sh` saat setup device baru dan oleh `./scripts/smart-erp.sh up`.
+Bila perlu menjalankan manual: `./scripts/smart-erp.sh fix`.
+
+Skrip itu idempoten dan melakukan:
+
+1. **Grant ulang DB user dengan host `%`** — Frappe membuat user DB terikat ke
+   IP container saat `bench new-site`. Docker memberi IP baru setiap `up`,
+   sehingga muncul `Access denied for user '<db_user>'@'<ip-baru>'`. Skrip
+   membuat ulang user `<db_user>'@'%'` dengan password dari
+   `sites/<site>/site_config.json`.
+2. **Regenerate manifest asset** (`bench build --using-cached`) — setelah image
+   di-rebuild, nama bundle ber-hash berubah tetapi `assets.json` bisa masih
+   menunjuk nama lama → CSS/JS 404 sehingga layout rusak.
+
+Setelah kode di `apps/frappe` / `apps/erpnext` diubah dan di-rebuild
+(`./scripts/smart-erp.sh build && ./scripts/smart-erp.sh up -d`), langkah 2
+sudah otomatis tercakup.
 
 ## Catatan penting
 
