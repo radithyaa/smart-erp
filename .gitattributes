@@ -1,0 +1,3 @@
+# Treat submodule contents as vendored; do not include in language stats noise.
+apps/frappe/** linguist-vendored
+apps/erpnext/** linguist-vendored

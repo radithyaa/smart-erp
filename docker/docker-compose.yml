@@ -1,0 +1,185 @@
+name: smart-erp
+
+# Smart ERP — ERPNext (develop) collaborative dev stack.
+#
+# Services mirror the official Frappe docker layout, but the app image is
+# BUILT FROM SOURCE (see ./Dockerfile) so teammates editing apps/frappe or
+# apps/erpnext and rebuilding will see each other's changes.
+#
+# In GitHub Codespaces the frontend (nginx) port 8080 is auto-forwarded and
+# opened as a public preview URL.
+
+x-erpnext-common: &erpnext-common
+  image: smart-erp-app:local
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  restart: unless-stopped
+  networks:
+    - smart-erp-net
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+    # NOTE: app sources are baked into the image at build time (see ./Dockerfile)
+    # rather than bind-mounted. Bind-mounting the raw git checkout would shadow
+    # the app's node_modules and built assets, which breaks Frappe's asset
+    # pipeline. To apply code edits from apps/frappe or apps/erpnext, rebuild:
+    #     ./scripts/smart-erp.sh build && ./scripts/smart-erp.sh up -d
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+    networks:
+      - smart-erp-net
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MARIADB_ROOT_PASSWORD: admin
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - smart-erp-net
+    volumes:
+      - redis-cache-data:/data
+
+  redis-queue:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - smart-erp-net
+    volumes:
+      - redis-queue-data:/data
+
+  configurator:
+    <<: *erpnext-common
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host mariadb;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://redis-cache:6379";
+        bench set-config -g redis_queue "redis://redis-queue:6379";
+        bench set-config -g redis_socketio "redis://redis-queue:6379";
+        bench set-config -gp socketio_port 9000;
+    depends_on:
+      - redis-cache
+      - redis-queue
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  backend:
+    <<: *erpnext-common
+    command: ["start.sh"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  websocket:
+    <<: *erpnext-common
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      redis-queue:
+        condition: service_started
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  queue-short:
+    <<: *erpnext-common
+    command: ["bench", "worker", "--queue", "short,default"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-queue:
+        condition: service_started
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  queue-long:
+    <<: *erpnext-common
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-queue:
+        condition: service_started
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  scheduler:
+    <<: *erpnext-common
+    command: ["bench", "schedule"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-queue:
+        condition: service_started
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+  frontend:
+    image: smart-erp-app:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/nginx-entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
+    networks:
+      - smart-erp-net
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - backend
+      - websocket
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: "$$host"
+      NGINX_LISTEN_PORT: 8080
+    ports:
+      - "8080:8080"
+
+networks:
+  smart-erp-net:
+    name: smart-erp-net
+
+volumes:
+  sites:
+  logs:
+  mariadb-data:
+  redis-cache-data:
+  redis-queue-data:

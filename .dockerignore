@@ -1,0 +1,12 @@
+# Keep build context small and fast.
+**/.git
+**/.github
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+**/sites
+**/logs
+**/backups
+**/.env
+docker/.env.local

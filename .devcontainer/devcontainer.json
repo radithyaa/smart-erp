@@ -1,0 +1,61 @@
+{
+  "name": "Smart ERP (ERPNext develop dev)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  "forwardPorts": [8080, 9000, 8000],
+  "portsAttributes": {
+    "8080": {
+      "label": "ERPNext Web UI",
+      "onAutoForward": "openPreview",
+      "visibility": "public"
+    },
+    "9000": {
+      "label": "Socket.IO (realtime)",
+      "onAutoForward": "silent",
+      "visibility": "public"
+    },
+    "8000": {
+      "label": "Frappe backend (gunicorn)",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "postCreateCommand": "bash scripts/devcontainer-setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "Vue.volar",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "editor.formatOnSave": false,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "remoteUser": "vscode"
+}

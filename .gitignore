@@ -1,0 +1,27 @@
+# ---- ERPNext / Frappe bench runtime (do NOT commit) ----
+sites/
+logs/
+config/
+.env
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.frappe/
+
+# Local generated site config / databases
+*.sql.gz
+*.sql
+backups/
+
+# ---- Editors / OS ----
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea/
+.DS_Store
+*.swp
+
+# ---- Docker ----
+docker/.env.local
