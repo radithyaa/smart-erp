@@ -1,14 +1,18 @@
 # Build an ERPNext bench image FROM the cloned submodule sources.
 #
-# Option B (this repo) tracks Frappe + ERPNext as git submodules under ./apps,
+# This repo tracks Frappe + ERPNext as git submodules under ./apps (pinned to
+# the stable `version-16` branch, which ships the Vue-based frappe-ui frontend),
 # so we build from source instead of using the prebuilt frappe/erpnext image.
 # Editing apps/frappe or apps/erpnext and rebuilding is what makes teammates
 # see each other's code changes:
 #
 #     ./scripts/smart-erp.sh build && ./scripts/smart-erp.sh up -d
 #
-# The base image already ships Python 3.14, Node 24, wkhtmltopdf and a bench
-# skeleton at /home/frappe/frappe-bench, matching what `develop` requires.
+# VERSION PINNING (keep these in sync, see .gitmodules):
+#   * Base image `frappe/erpnext:v16` matches the submodule branch `version-16`.
+#   * Do NOT point the submodules back at `develop` (that is 17-dev/unstable and
+#     mismatches this v16 base image). To move up, bump BOTH the branch in
+#     .gitmodules AND this base image tag together.
 
 FROM frappe/erpnext:v16
 

@@ -1,10 +1,13 @@
 # Smart ERP
 
-ERPNext pada branch **`develop`** (Frappe Framework develop) dengan UI Vue/frappe-ui,
-untuk pengembangan kolaboratif dengan **preview web** dan **SSH** di GitHub Codespaces.
+ERPNext pada branch **`version-16`** (rilis stabil, Frappe Framework 16) dengan UI
+Vue/frappe-ui, untuk pengembangan kolaboratif dengan **preview web** dan **SSH** di
+GitHub Codespaces.
 
-> Versi branch `develop` saat ini terbaca sebagai **17.0.0-dev** (unstable).
-> Bila ingin yang stabil, pin submodule ke branch `version-16`/`version-15`.
+> Pin versi saat ini: **Frappe 16.51.1** + **ERPNext 16.50.0**, cocok dengan base
+> image `frappe/erpnext:v16` di `docker/Dockerfile`. Submodule **sengaja** tidak
+> memakai `develop` (17-dev/unstable) agar build stabil. Lihat catatan pinning di
+> `docker/Dockerfile`.
 
 ## Cara pakai (GitHub Codespaces)
 
@@ -27,8 +30,10 @@ untuk pengembangan kolaboratif dengan **preview web** dan **SSH** di GitHub Code
 ```
 smart-erp/
 ├── apps/
-│   ├── frappe/      # submodule → github.com/frappe/frappe   (branch develop)
-│   └── erpnext/     # submodule → github.com/frappe/erpnext  (branch develop)
+│   ├── frappe/      # submodule → github.com/frappe/frappe   (branch version-16)
+│   └── erpnext/     # submodule → github.com/frappe/erpnext  (branch version-16)
+│
+│   (Layer produk/tim ada di app terpisah `apps/smart_erp_ai` — lihat docs/SRS.md)
 ├── docker/
 │   ├── Dockerfile          # build bench image dari source submodule
 │   └── docker-compose.yml  # mariadb, redis, backend, websocket, workers, scheduler, nginx

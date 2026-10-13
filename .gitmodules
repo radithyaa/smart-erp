@@ -1,8 +1,8 @@
 [submodule "apps/frappe"]
 	path = apps/frappe
 	url = https://github.com/frappe/frappe.git
-	branch = develop
+	branch = version-16
 [submodule "apps/erpnext"]
 	path = apps/erpnext
 	url = https://github.com/frappe/erpnext.git
-	branch = develop
+	branch = version-16
