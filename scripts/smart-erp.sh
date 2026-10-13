@@ -45,6 +45,11 @@ case "${1:-help}" in
   backup)   $COMPOSE exec backend bench --site "$SITE" backup ;;
   fix)      bash scripts/post-up-fix.sh ;;
 
+  # --- L2 analytics demo (Dev B): seed data dummy + analisis proses ---
+  seed)     bash scripts/seed-demo-data.sh "${2:-300}" ;;
+  reseed)   bash scripts/seed-demo-data.sh reset ;;
+  demo)     bash scripts/run-demo.sh ;;
+
   # --- Hot-reload dev mode (source bind-mounted, watcher + gunicorn --reload) ---
   dev)
     # If the *default* stack is up (no dev overlay), tear it down first so the
@@ -94,8 +99,13 @@ Smart ERP helper
   ./scripts/smart-erp.sh shell         Bash inside backend container
   ./scripts/smart-erp.sh bench <args>  Run bench command for the site
   ./scripts/smart-erp.sh migrate       Migrate the site
-  ./scripts/smart-erp.sh backup        Backup the site
+  ./scripts/smart-erp.sh backup        Back up the site
   ./scripts/smart-erp.sh db            MariaDB root shell
+
+L2 analytics demo (Smart ERP AI):
+  ./scripts/smart-erp.sh seed [N]      Seed N dummy P2P cases (default 300)
+  ./scripts/smart-erp.sh reseed        Delete the seed batch only
+  ./scripts/smart-erp.sh demo          Run the F1/F2/F3/F7 analytics demo
 
 Hot-reload dev mode:
   ./scripts/smart-erp.sh dev           Start stack with live reload (bind-mounted sources)

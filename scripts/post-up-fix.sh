@@ -30,6 +30,10 @@ fi
 SITE="${FRAPPE_SITE_NAME:-erpnext.localhost}"
 DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-admin}"
 
+# L2 app (ours). Registered in the image (Dockerfile) and re-ensured here so a
+# site volume created before the app existed still picks it up.
+L2_APP="smart_erp_ai"
+
 running() { $COMPOSE ps --status running --services 2>/dev/null | grep -qx "$1"; }
 
 echo "==> [post-up-fix] Ensuring DB grant for site '$SITE' uses host '%'"
@@ -67,6 +71,41 @@ if running backend; then
     'cd /home/frappe/frappe-bench && bench build --apps frappe,erpnext --using-cached' \
     && echo "    OK: asset manifest regenerated" \
     || echo "    WARN: asset manifest regeneration failed; run 'bench build' manually"
+else
+  echo "    Skipped: backend not running"
+fi
+
+# --- L2 app registration (idempotent) -------------------------------------
+# Makes `bench execute smart_erp_ai...` work and installs the app on the site
+# the first time. Needed because a site volume created before the app existed
+# will not have it, and because sites/apps.txt lives in the shared volume while
+# the editable-install .pth lives in the image.
+echo "==> [post-up-fix] Ensuring L2 app '$L2_APP' is registered and installed"
+if running backend; then
+  # 1) apps.txt (volume) must list the app.
+  $COMPOSE exec -T backend bash -lc "grep -qx '$L2_APP' sites/apps.txt 2>/dev/null || echo '$L2_APP' >> sites/apps.txt" \
+    && echo "    OK: sites/apps.txt lists $L2_APP" \
+    || echo "    WARN: could not update sites/apps.txt"
+
+  # 2) editable install (.pth) so the module is importable. The image already
+  #    did this at build; re-run cheaply/idempotently (pip -e is a no-op if ok).
+  $COMPOSE exec -T backend bash -lc \
+    "cd /home/frappe/frappe-bench && env/bin/pip install -e apps/$L2_APP -q" \
+    && echo "    OK: $L2_APP importable (editable install)" \
+    || echo "    WARN: editable install failed"
+
+  # 3) install on the site if not already installed.
+  if $COMPOSE exec -T backend test -f "sites/$SITE/site_config.json"; then
+    if $COMPOSE exec -T backend bench --site "$SITE" list-apps 2>/dev/null | grep -q "$L2_APP"; then
+      echo "    OK: already installed on $SITE"
+    else
+      $COMPOSE exec -T backend bench --site "$SITE" install-app "$L2_APP" \
+        && echo "    OK: installed on $SITE" \
+        || echo "    WARN: install-app failed; run manually"
+    fi
+  else
+    echo "    Skipped: site $SITE not created yet"
+  fi
 else
   echo "    Skipped: backend not running"
 fi

@@ -43,6 +43,7 @@ else
       --db-root-password "$DB_ROOT_PASSWORD" \
       --admin-password "$ADMIN_PASSWORD" \
       --install-app erpnext \
+      --install-app smart_erp_ai \
       --set-default
 fi
 

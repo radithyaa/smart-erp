@@ -36,6 +36,11 @@ x-frappe-lock: &frappe-lock ../apps/frappe/yarn.lock:/home/frappe/frappe-bench/a
 x-erpnext-src: &erpnext-src ../apps/erpnext/erpnext:/home/frappe/frappe-bench/apps/erpnext/erpnext
 x-erpnext-pkg: &erpnext-pkg ../apps/erpnext/package.json:/home/frappe/frappe-bench/apps/erpnext/package.json
 x-erpnext-lock: &erpnext-lock ../apps/erpnext/yarn.lock:/home/frappe/frappe-bench/apps/erpnext/yarn.lock
+# L2 (our app) — bind-mount the Python package so Dev A/B edits are live.
+# The editable-install .pth (created at image build) still points at
+# apps/smart_erp_ai, which this mount keeps in sync with the host checkout.
+x-smart-erp-src: &smart-erp-src ../apps/smart_erp_ai/smart_erp_ai:/home/frappe/frappe-bench/apps/smart_erp_ai/smart_erp_ai
+x-smart-erp-pkg: &smart-erp-pkg ../apps/smart_erp_ai/pyproject.toml:/home/frappe/frappe-bench/apps/smart_erp_ai/pyproject.toml
 
 x-sites: &sites sites:/home/frappe/frappe-bench/sites
 x-logs: &logs logs:/home/frappe/frappe-bench/logs
@@ -57,6 +62,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
     command:
       - bash
       - -c
@@ -92,6 +99,7 @@ services:
       # the backend/watcher, otherwise it serves the stale in-image bundles.
       - *frappe-src
       - *erpnext-src
+      - *smart-erp-src
 
   websocket:
     entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
@@ -107,6 +115,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
 
   queue-short:
     entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
@@ -122,6 +132,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
 
   queue-long:
     entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
@@ -137,6 +149,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
 
   scheduler:
     entrypoint: ["/home/frappe/frappe-bench/docker-dev-entrypoint.sh"]
@@ -152,6 +166,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
 
   # esbuild watcher: rebuilds JS/CSS bundles on save, then keeps watching.
   watch:
@@ -178,6 +194,8 @@ services:
       - *erpnext-src
       - *erpnext-pkg
       - *erpnext-lock
+      - *smart-erp-src
+      - *smart-erp-pkg
     command:
       - bash
       - -c

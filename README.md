@@ -30,21 +30,35 @@ GitHub Codespaces.
 ```
 smart-erp/
 ├── apps/
-│   ├── frappe/      # submodule → github.com/frappe/frappe   (branch version-16)
-│   └── erpnext/     # submodule → github.com/frappe/erpnext  (branch version-16)
+│   ├── frappe/          # submodule → github.com/frappe/frappe   (branch version-16)
+│   ├── erpnext/         # submodule → github.com/frappe/erpnext  (branch version-16)
+│   └── smart_erp_ai/    # L2 app MILIK TIM (bukan submodule) — agent + process intelligence
 │
-│   (Layer produk/tim ada di app terpisah `apps/smart_erp_ai` — lihat docs/SRS.md)
 ├── docker/
-│   ├── Dockerfile          # build bench image dari source submodule
+│   ├── Dockerfile          # build bench image dari source submodule + apps/smart_erp_ai
 │   └── docker-compose.yml  # mariadb, redis, backend, websocket, workers, scheduler, nginx
 ├── scripts/
 │   ├── devcontainer-setup.sh   # dijalankan otomatis oleh Codespaces
-│   └── smart-erp.sh            # helper perintah sehari-hari
+│   ├── smart-erp.sh            # helper perintah sehari-hari
+│   ├── seed-demo-data.sh       # [L2] seed data dummy P2P
+│   └── run-demo.sh             # [L2] jalankan demo analisis F1–F3/F7
 └── .devcontainer/devcontainer.json
 ```
 
+### Layer: L1 vs L2 (penting — baca `docs/AGENT-RULES.md`)
+
+| Layer | Isi | Lisensi | Boleh diedit? |
+|---|---|---|---|
+| **L1** | `apps/frappe`, `apps/erpnext` (submodule) | GPLv3 | **Tidak** — upstream read-only (RULE 1.2) |
+| **L2** | `apps/smart_erp_ai` (kode kami) | milik tim | Ya — di sini semua logika produk |
+
 Karena `frappe` dan `erpnext` adalah **submodule**, kode aplikasi bisa diedit
-langsung, dan perubahan tercatat di git. 👥
+langsung, dan perubahan tercatat di git. App L2 `smart_erp_ai` adalah direktori
+biasa di repo ini (bukan submodule), sehingga perubahan ikut ter-commit biasa. 👥
+
+> Setup otomatis: `apps/smart_erp_ai` **ter-bake ke image** (lihat `docker/Dockerfile`)
+> dan otomatis di-`install-app` ke site saat setup / `up` via `scripts/post-up-fix.sh`.
+> Tidak ada langkah manual tambahan.
 
 ## Setelah clone di luar Codespaces (mesin sendiri)
 
@@ -68,13 +82,25 @@ git submodule update --init --recursive
 ./scripts/smart-erp.sh logs backend  # lihat log
 ./scripts/smart-erp.sh down          # matikan (data tetap)
 ./scripts/smart-erp.sh build         # rebuild image setelah ubah source
-./scripts/smart-erp.sh fix           # re-apply grant DB + regenerate asset manifest
+./scripts/smart-erp.sh fix           # re-apply grant DB + asset manifest + daftar app L2
 ./scripts/smart-erp.sh dev           # hot reload (bind-mount source + watcher)
 ./scripts/smart-erp.sh shell         # masuk bash ke container backend
 ./scripts/smart-erp.sh bench <args>  # jalankan bench untuk site
 ./scripts/smart-erp.sh migrate       # migrasi site
 ./scripts/smart-erp.sh backup        # backup site
 ```
+
+## Demo analitik L2 (Smart ERP AI)
+
+Setelah stack hidup, siapkan data & jalankan demo dalam dua perintah:
+
+```sh
+./scripts/smart-erp.sh seed          # 300 kasus P2P dummy (bottleneck + rework disuntik)
+./scripts/smart-erp.sh demo          # F1 event log → F2 bottleneck → F3 rework → F7 pending
+```
+
+Perintah lain: `./scripts/smart-erp.sh seed 400`, `./scripts/smart-erp.sh reseed`
+(hapus batch seed saja). Detail di `docs/DEV-TASKS.md` & `docs/DEV-B-STATUS.md`.
 
 ## Alur kolaborasi
 
@@ -93,6 +119,10 @@ git submodule update --init --recursive
   Untuk perubahan Python saja, cukup restart service terkait:
   `docker compose -f docker/docker-compose.yml restart backend`
 
+- Setelah mengubah kode **L2** (`apps/smart_erp_ai`): pakai mode dev
+  (`./scripts/smart-erp.sh dev`) yang me-bind-mount `apps/smart_erp_ai/smart_erp_ai`,
+  sehingga perubahan Python langsung ter-reload oleh gunicorn tanpa rebuild.
+
 ## Hot reload (mode dev)
 
 Default stack **tidak** hot reload karena source di-bake ke image (lihat catatan
@@ -107,6 +137,10 @@ alur default:
 ```
 
 Apa yang aktif:
+
+- **L2 `apps/smart_erp_ai`** (kode produk kami): source Python di-bind-mount;
+  edit `apps/smart_erp_ai/smart_erp_ai/**/*.py`, gunicorn (`--reload`) langsung
+  memuat ulang. Tidak perlu rebuild.
 
 - **Frontend (JS/CSS):** source `apps/*/public/**` di-bind-mount. Edit file
   `.bundle.js` / `.bundle.scss`, service `watch` (esbuild) otomatis
