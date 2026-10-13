@@ -78,6 +78,13 @@ def get_pending_at_stage(process: str, stage: str) -> list[dict]:
 
 **Aturan:** bentuk return tidak berubah tanpa notifikasi Dev A. Perubahan = update dokumen ini.
 
+> **Status implementasi (Dev B):** kontrak v1 **sudah tersedia** di
+> `apps/smart_erp_ai/smart_erp_ai/process_intelligence/api.py`.
+> Bentuk return sesuai persis di atas (adapter menambahkan field ekstra
+> non-breaking seperti `label`, `is_bottleneck`, `stage`, `doctype`).
+> Dev A boleh langsung mendaftarkannya sebagai tool (A6). Lihat
+> `docs/DEV-B-STATUS.md` untuk detail & cara verifikasi.
+
 ---
 
 ## 2. DEV A — Jalur Eksekusi
