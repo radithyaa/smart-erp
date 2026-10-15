@@ -63,14 +63,34 @@ else
   echo "    Skipped: mariadb/backend not running"
 fi
 
+echo "==> [post-up-fix] Ensuring localhost site resolution and default_site"
+if running backend; then
+  $COMPOSE exec -T backend bash -c \
+    "cd /home/frappe/frappe-bench && \
+     [ -d sites/$SITE ] && [ ! -e sites/localhost ] && ln -s $SITE sites/localhost || true; \
+     echo '$SITE' > sites/currentsite.txt; \
+     bench set-config -g default_site $SITE >/dev/null 2>&1 || true" \
+    && echo "    OK: localhost mapped to $SITE" \
+    || echo "    WARN: could not configure localhost resolution"
+else
+  echo "    Skipped: backend not running"
+fi
+
 echo "==> [post-up-fix] Regenerating asset manifest from built bundles"
 if running backend; then
-  # --using-cached skips compilation and only rewrites sites/assets/assets.json
-  # (and the per-app asset links) from the bundle files already on disk.
-  $COMPOSE exec -T backend bash -c \
-    'cd /home/frappe/frappe-bench && bench build --apps frappe,erpnext --using-cached' \
+  # Repair the common fresh-volume case as well as stale hashed filenames.
+  # A new named `sites` volume can hide the manifest generated in the image;
+  # --using-cached cannot create bundles that are absent from that volume.
+  if $COMPOSE exec -T backend bash -c \
+    'test -s sites/assets/assets.json && compgen -G "sites/assets/frappe/dist/css/desk.bundle.*.css" >/dev/null'; then
+    $COMPOSE exec -T backend bash -c \
+      'cd /home/frappe/frappe-bench && bench build --apps frappe,erpnext --using-cached'
+  else
+    $COMPOSE exec -T backend bash -c \
+      'cd /home/frappe/frappe-bench && bench build --apps frappe,erpnext'
+  fi \
     && echo "    OK: asset manifest regenerated" \
-    || echo "    WARN: asset manifest regeneration failed; run 'bench build' manually"
+    || echo "    WARN: asset build failed; inspect backend logs and run 'bench build --apps frappe,erpnext'"
 else
   echo "    Skipped: backend not running"
 fi

@@ -263,11 +263,18 @@ def extract_events(
 	events: list[ProcessEvent] = []
 	link_cache: dict[str, str] = {}
 
+	period_filter = None
+	if period:
+		try:
+			start, end = _period_bounds(period)
+			period_filter = ["between", [start, end]]
+		except ValueError as err:
+			frappe.throw(str(err))
+
 	for doctype in doctypes:
 		filters: dict = {}
-		if period:
-			start, end = _period_bounds(period)
-			filters["creation"] = ["between", [start, end]]
+		if period_filter:
+			filters["creation"] = period_filter
 
 		docs = frappe.get_all(
 			doctype,
@@ -304,12 +311,17 @@ def _dedupe_and_sort(events: list[ProcessEvent]) -> list[ProcessEvent]:
 
 def _period_bounds(period: str) -> tuple[str, str]:
 	"""Ubah ``"YYYY-MM"`` menjadi (awal, akhir) timestamp inklusif."""
-	year, month = period.split("-")[:2]
-	start = f"{year}-{int(month):02d}-01 00:00:00"
-	if int(month) == 12:
-		end = f"{int(year) + 1}-01-01 00:00:00"
+	parts = (period or "").strip().split("-")
+	if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+		raise ValueError(f"Format periode tidak valid: '{period}'. Gunakan format 'YYYY-MM'.")
+	year_int, month_int = int(parts[0]), int(parts[1])
+	if month_int < 1 or month_int > 12:
+		raise ValueError(f"Bulan tidak valid: {month_int}. Harus antara 01 dan 12.")
+	start = f"{year_int:04d}-{month_int:02d}-01 00:00:00"
+	if month_int == 12:
+		end = f"{year_int + 1:04d}-01-01 00:00:00"
 	else:
-		end = f"{year}-{int(month) + 1:02d}-01 00:00:00"
+		end = f"{year_int:04d}-{month_int + 1:02d}-01 00:00:00"
 	return start, end
 
 

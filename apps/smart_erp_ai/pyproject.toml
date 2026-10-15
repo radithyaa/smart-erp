@@ -7,7 +7,7 @@ description = "Agentic Process Intelligence di atas ERP open source (L2)."
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = []
+dependencies = ["langchain>=0.3,<0.4", "langchain-openai>=0.2,<0.3"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

@@ -25,3 +25,13 @@ backups/
 
 # ---- Docker ----
 docker/.env.local
+
+# ---- Agent & Local Tools ----
+.kilo/
+
+# ---- Sensitive / local files (NEVER commit) ----
+cookies.txt
+*.cookies.txt
+.env.local
+*.env
+!.env.example
