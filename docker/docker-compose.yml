@@ -20,6 +20,7 @@ x-erpnext-common: &erpnext-common
   volumes:
     - sites:/home/frappe/frappe-bench/sites
     - logs:/home/frappe/frappe-bench/logs
+    - ../apps/smart_erp_ai:/home/frappe/frappe-bench/apps/smart_erp_ai
     # NOTE: app sources are baked into the image at build time (see ./Dockerfile)
     # rather than bind-mounted. Bind-mounting the raw git checkout would shadow
     # the app's node_modules and built assets, which breaks Frappe's asset
@@ -38,7 +39,9 @@ services:
       - --skip-character-set-client-handshake
       - --skip-innodb-read-only-compressed
     environment:
-      MARIADB_ROOT_PASSWORD: admin
+      # ⚠️ Override via env var for non-dev environments.
+      # Set MARIADB_ROOT_PASSWORD in your shell or a .env file (which is gitignored).
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-admin}
     volumes:
       - mariadb-data:/var/lib/mysql
     healthcheck:
@@ -168,7 +171,7 @@ services:
     environment:
       BACKEND: backend:8000
       SOCKETIO: websocket:9000
-      FRAPPE_SITE_NAME_HEADER: "$$host"
+      FRAPPE_SITE_NAME_HEADER: "erpnext.localhost"
       NGINX_LISTEN_PORT: 8080
     ports:
       - "8080:8080"

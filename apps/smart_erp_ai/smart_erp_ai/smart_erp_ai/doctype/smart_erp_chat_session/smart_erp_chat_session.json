@@ -1,0 +1,104 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-14 06:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"status",
+		"message_count",
+		"messages_section",
+		"messages",
+		"pending_action_section",
+		"pending_action"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"label": "User",
+			"options": "User",
+			"reqd": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Active\nAwaiting Confirmation\nCompleted",
+			"default": "Active",
+			"reqd": 1
+		},
+		{
+			"fieldname": "message_count",
+			"fieldtype": "Int",
+			"label": "Message Count",
+			"read_only": 1,
+			"default": "0"
+		},
+		{
+			"fieldname": "messages_section",
+			"fieldtype": "Section Break",
+			"label": "Messages"
+		},
+		{
+			"fieldname": "messages",
+			"fieldtype": "Table",
+			"label": "Messages",
+			"options": "Smart ERP Chat Message"
+		},
+		{
+			"fieldname": "pending_action_section",
+			"fieldtype": "Section Break",
+			"label": "Pending Action"
+		},
+		{
+			"fieldname": "pending_action",
+			"fieldtype": "Code",
+			"label": "Pending Action",
+			"options": "JSON"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"is_submittable": 0,
+	"links": [],
+	"modified": "2026-10-14 06:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Smart ERP AI",
+	"name": "Smart ERP Chat Session",
+	"naming_rule": "Random",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"if_owner": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "All",
+			"share": 1,
+			"submit": 0,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"if_owner": 0,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"submit": 0,
+			"write": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

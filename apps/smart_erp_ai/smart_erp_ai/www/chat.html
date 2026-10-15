@@ -1,0 +1,608 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Smart ERP Assistant{% endblock %}
+
+{% block header %}
+<h1>{{ _("Smart ERP Assistant") }}</h1>
+<p class="text-muted mb-0">Agentic Process Intelligence</p>
+{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-secondary btn-sm" onclick="newChat()" id="new-chat-btn">
+	{{ _("Sesi Baru") }}
+</button>
+{% endblock %}
+
+{% block style %}
+<style>
+	.chat-wrapper {
+		max-width: 900px;
+		margin: 0 auto;
+	}
+	.chat-container {
+		background: #ffffff;
+		border-radius: 12px;
+		box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+		display: flex;
+		flex-direction: column;
+		height: calc(100vh - 240px);
+		min-height: 400px;
+		overflow: hidden;
+		border: 1px solid #e2e8f0;
+	}
+	#chat-area {
+		flex: 1;
+		overflow-y: auto;
+		padding: 20px;
+		background: #f8fafc;
+	}
+	.msg {
+		max-width: 75%;
+		margin-bottom: 14px;
+		padding: 12px 16px;
+		border-radius: 12px;
+		word-wrap: break-word;
+		line-height: 1.5;
+		font-size: 14px;
+	}
+	.msg.user {
+		background: #6366f1;
+		color: #fff;
+		margin-left: auto;
+		border-bottom-right-radius: 2px;
+	}
+	.msg.assistant {
+		background: #ffffff;
+		color: #1e293b;
+		border: 1px solid #e2e8f0;
+		border-bottom-left-radius: 2px;
+	}
+	.msg.tool {
+		background: #f0fdf4;
+		color: #166534;
+		border: 1px solid #bbf7d0;
+		font-size: 13px;
+	}
+	.msg.system {
+		background: #fefce8;
+		color: #854d0e;
+		border: 1px solid #fef08a;
+		font-size: 13px;
+	}
+
+	/* — Markdown content styles — */
+	.from-markdown h1, .from-markdown h2, .from-markdown h3,
+	.from-markdown h4, .from-markdown h5, .from-markdown h6 {
+		margin: 8px 0 4px;
+		font-weight: 600;
+		line-height: 1.3;
+	}
+	.from-markdown h1 { font-size: 1.3em; }
+	.from-markdown h2 { font-size: 1.2em; }
+	.from-markdown h3 { font-size: 1.1em; }
+	.from-markdown p { margin: 4px 0; }
+	.from-markdown ul, .from-markdown ol {
+		margin: 4px 0;
+		padding-left: 20px;
+	}
+	.from-markdown li { margin: 2px 0; }
+	.from-markdown code {
+		background: #f1f5f9;
+		padding: 1px 5px;
+		border-radius: 3px;
+		font-size: 0.88em;
+		font-family: 'Courier New', monospace;
+	}
+	.from-markdown pre {
+		background: #1e293b;
+		color: #e2e8f0;
+		padding: 10px 12px;
+		border-radius: 6px;
+		overflow-x: auto;
+		margin: 8px 0;
+	}
+	.from-markdown pre code {
+		background: none;
+		color: inherit;
+		padding: 0;
+	}
+	.from-markdown a {
+		color: #6366f1;
+		text-decoration: underline;
+	}
+	.from-markdown table {
+		border-collapse: collapse;
+		width: 100%;
+		margin: 8px 0;
+		font-size: 0.9em;
+		display: block;
+		overflow-x: auto;
+	}
+	.from-markdown th, .from-markdown td {
+		border: 1px solid #e2e8f0;
+		padding: 6px 10px;
+		text-align: left;
+	}
+	.from-markdown th {
+		background: #f8fafc;
+		font-weight: 600;
+	}
+	.from-markdown blockquote {
+		border-left: 3px solid #6366f1;
+		padding-left: 12px;
+		margin: 8px 0;
+		color: #64748b;
+		font-style: italic;
+	}
+	.from-markdown hr {
+		border: none;
+		border-top: 1px solid #e2e8f0;
+		margin: 12px 0;
+	}
+
+	/* — Streaming cursor — */
+	.msg-content.streaming::after {
+		content: '▊';
+		display: inline-block;
+		animation: blink 0.8s infinite;
+		color: #6366f1;
+		margin-left: 2px;
+	}
+	@keyframes blink {
+		0%, 50% { opacity: 1; }
+		51%, 100% { opacity: 0; }
+	}
+
+	/* — Tool call details — */
+	.tool-list {
+		margin-top: 8px;
+		padding: 6px 10px;
+		background: #f1f5f9;
+		border-radius: 6px;
+		font-size: 12px;
+		color: #475569;
+	}
+	.tool-list summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+	/* — Confirm box — */
+	.confirm-box {
+		background: #ffffff;
+		border: 2px solid #6366f1;
+		border-radius: 12px;
+		padding: 16px;
+		margin-bottom: 14px;
+		box-shadow: 0 2px 8px rgba(99,102,241,0.15);
+		max-width: 75%;
+	}
+	.confirm-box .actions {
+		margin-top: 12px;
+		display: flex;
+		gap: 10px;
+	}
+
+	/* — Input area — */
+	#input-area {
+		display: flex;
+		padding: 16px;
+		background: #ffffff;
+		border-top: 1px solid #e2e8f0;
+		gap: 10px;
+	}
+	#msg-input {
+		flex: 1;
+		padding: 10px 14px;
+		border: 1px solid #cbd5e1;
+		border-radius: 8px;
+		font-size: 14px;
+		outline: none;
+		transition: border-color 0.2s;
+	}
+	#msg-input:focus {
+		border-color: #6366f1;
+	}
+	#send-btn {
+		padding: 10px 24px;
+		background: #6366f1;
+		color: #fff;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 14px;
+		font-weight: 600;
+		transition: background 0.2s;
+	}
+	#send-btn:hover {
+		background: #4f46e5;
+	}
+	#send-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* — Guest banner — */
+	.guest-banner {
+		background: #eef2ff;
+		border-bottom: 1px solid #c7d2fe;
+		padding: 10px 16px;
+		font-size: 13px;
+		color: #3730a3;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.guest-banner a {
+		background: #4f46e5;
+		color: white;
+		padding: 4px 12px;
+		border-radius: 4px;
+		text-decoration: none;
+		font-weight: 500;
+	}
+
+	/* — Loading indicator — */
+	.loading {
+		color: #64748b;
+		font-style: italic;
+	}
+
+	@media (max-width: 640px) {
+		.chat-container {
+			height: calc(100dvh - 200px);
+			min-height: 420px;
+			border-radius: 10px;
+		}
+		#chat-area { padding: 14px 10px; }
+		.msg { max-width: 90%; padding: 10px 12px; }
+		.confirm-box { max-width: 90%; }
+		#input-area { padding: 10px; gap: 8px; }
+		#msg-input { min-width: 0; }
+		#send-btn { padding: 10px 16px; }
+	}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="chat-wrapper">
+	<div class="chat-container">
+		{% if is_guest %}
+		<div class="guest-banner">
+			<span>&#8505; Anda mengakses sebagai tamu. Untuk interaksi penuh dengan data ERP, silakan login.</span>
+			<a href="/login?redirect-to=/chat">Login</a>
+		</div>
+		{% endif %}
+		<div id="chat-area" role="log" aria-live="polite" aria-label="Percakapan">
+			<div class="msg assistant">
+				<div class="msg-content from-markdown">
+					Halo! Saya asisten pintar <strong>Smart ERP AI</strong>. Saya dapat membantu menganalisis proses pengadaan (P2P), memeriksa bottleneck, serta mencari dokumen ERPNext. Apa yang bisa saya bantu?
+				</div>
+			</div>
+		</div>
+		<form id="input-area">
+			<input type="text" id="msg-input" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan" required>
+			<button type="submit" id="send-btn">Kirim</button>
+		</form>
+	</div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+	var sessionId = null;
+	var sendButton = document.getElementById('send-btn');
+	var msgInput = document.getElementById('msg-input');
+	var chatArea = document.getElementById('chat-area');
+	var busy = false;
+
+	if (window.marked) {
+		marked.setOptions({ breaks: true, gfm: true });
+	}
+
+	document.getElementById('input-area').addEventListener('submit', function(event) {
+		event.preventDefault();
+		send();
+	});
+
+	/* — Markdown rendering — */
+	function escapeHtml(text) {
+		var div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
+	}
+
+	function renderMarkdown(text) {
+		if (!text) return '';
+		if (window.frappe && typeof frappe.markdown === 'function') {
+			try { return frappe.markdown(text); } catch (e) {}
+		}
+		if (window.marked) {
+			return marked.parse(text);
+		}
+		return escapeHtml(text)
+			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*(.+?)\*/g, '<em>$1</em>')
+			.replace(/`(.+?)`/g, '<code>$1</code>')
+			.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+			.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+			.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+			.replace(/\n/g, '<br>');
+	}
+
+	/* — API caller — */
+	function callApi(method, args, callback, errorCallback) {
+		if (window.frappe && typeof frappe.call === 'function') {
+			frappe.call({
+				method: method,
+				args: args,
+				callback: callback,
+				error: errorCallback
+			});
+		} else {
+			var csrfToken = (window.frappe && window.frappe.csrf_token) ||
+				(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) || [])[1] || '';
+			fetch('/api/method/' + method, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'application/json',
+					'X-Frappe-CSRF-Token': csrfToken
+				},
+				credentials: 'same-origin',
+				body: JSON.stringify(args)
+			})
+			.then(function(res) {
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				return res.json();
+			})
+			.then(function(data) { callback(data); })
+			.catch(function(err) { if (errorCallback) errorCallback(err); });
+		}
+	}
+
+	/* — Chunked message streaming — */
+	function streamText(element, text, onDone) {
+		var total = text.length;
+		if (total === 0) {
+			if (onDone) onDone();
+			return;
+		}
+		var charsPerTick = Math.max(2, Math.ceil(total / 80));
+		var pos = 0;
+		element.classList.add('streaming');
+		element.innerHTML = '';
+
+		function tick() {
+			if (pos >= total) {
+				element.innerHTML = renderMarkdown(text);
+				element.classList.remove('streaming');
+				chatArea.scrollTop = chatArea.scrollHeight;
+				if (onDone) onDone();
+				return;
+			}
+			pos += charsPerTick;
+			var partial = text.substring(0, pos);
+			element.innerHTML = renderMarkdown(partial);
+			chatArea.scrollTop = chatArea.scrollHeight;
+			setTimeout(tick, 15);
+		}
+		tick();
+	}
+
+	/* — Tool call details — */
+	function createToolCallDetails(toolCalls) {
+		var det = document.createElement('details');
+		det.className = 'tool-list';
+		var sum = document.createElement('summary');
+		sum.textContent = toolCalls.length + ' tool call(s)';
+		det.appendChild(sum);
+		toolCalls.forEach(function(tc) {
+			var p = document.createElement('div');
+			p.textContent = (tc.tool || tc.name) + ': ' + JSON.stringify(tc.args);
+			p.style.fontSize = '12px';
+			p.style.margin = '4px 0';
+			det.appendChild(p);
+		});
+		return det;
+	}
+
+	/* — Add message — */
+	function addMsg(role, text, toolCalls, onStreamDone) {
+		var div = document.createElement('div');
+		div.className = 'msg ' + role;
+
+		var content = document.createElement('div');
+		content.className = 'msg-content';
+		if (role === 'assistant') {
+			content.classList.add('from-markdown');
+		}
+
+		div.appendChild(content);
+
+		if (toolCalls && toolCalls.length > 0) {
+			div.appendChild(createToolCallDetails(toolCalls));
+		}
+
+		chatArea.appendChild(div);
+		chatArea.scrollTop = chatArea.scrollHeight;
+
+		if (role === 'assistant' && text) {
+			streamText(content, text, function() {
+				busy = false;
+				sendButton.disabled = false;
+				msgInput.disabled = false;
+				msgInput.focus();
+				if (onStreamDone) onStreamDone();
+			});
+		} else if (role === 'assistant') {
+			content.innerHTML = renderMarkdown(text);
+			busy = false;
+			sendButton.disabled = false;
+			msgInput.disabled = false;
+			if (onStreamDone) onStreamDone();
+		} else {
+			content.textContent = text;
+			chatArea.scrollTop = chatArea.scrollHeight;
+		}
+	}
+
+	/* — Confirm box — */
+	function addConfirmBox(description, action) {
+		var div = document.createElement('div');
+		div.className = 'confirm-box';
+		var p = document.createElement('p');
+		p.textContent = description;
+		div.appendChild(p);
+		var btnDiv = document.createElement('div');
+		btnDiv.className = 'actions';
+		var yes = document.createElement('button');
+		yes.className = 'btn btn-primary btn-sm';
+		yes.textContent = 'Konfirmasi';
+		yes.onclick = function() { doConfirm(); };
+		var no = document.createElement('button');
+		no.className = 'btn btn-secondary btn-sm';
+		no.textContent = 'Batal';
+		no.onclick = function() { doCancel(); };
+		btnDiv.appendChild(yes);
+		btnDiv.appendChild(no);
+		div.appendChild(btnDiv);
+		chatArea.appendChild(div);
+		chatArea.scrollTop = chatArea.scrollHeight;
+	}
+
+	/* — Typing indicator & busy state — */
+	function showTypingIndicator() {
+		var d = document.createElement('div');
+		d.className = 'msg assistant loading';
+		d.id = 'loading-msg';
+		d.innerHTML = '<div class="msg-content">Mengetik...</div>';
+		chatArea.appendChild(d);
+		chatArea.scrollTop = chatArea.scrollHeight;
+	}
+
+	function hideTypingIndicator() {
+		var lm = document.getElementById('loading-msg');
+		if (lm) lm.remove();
+	}
+
+	function setBusy(on) {
+		busy = on;
+		sendButton.disabled = on;
+		msgInput.disabled = on;
+		document.querySelectorAll('.confirm-box button').forEach(function(button) {
+			button.disabled = on;
+		});
+	}
+
+	/* — Send / Confirm / Cancel — */
+	function send() {
+		if (busy) return;
+		var msg = msgInput.value.trim();
+		if (!msg) return;
+		msgInput.value = '';
+		addMsg('user', msg);
+		setBusy(true);
+		showTypingIndicator();
+		callApi(
+			'smart_erp_ai.api.ask',
+			{ message: msg, session_id: sessionId, confirm: 'false' },
+			function(r) {
+				if (r && r.message) {
+					handleResponse(r.message);
+				} else {
+					hideTypingIndicator();
+					setBusy(false);
+				}
+			},
+			function(err) {
+				hideTypingIndicator();
+				setBusy(false);
+				addMsg('system', errorMessage(err));
+			}
+		);
+	}
+
+	function doConfirm() {
+		if (busy) return;
+		setBusy(true);
+		showTypingIndicator();
+		callApi(
+			'smart_erp_ai.api.ask',
+			{ message: '', session_id: sessionId, confirm: 'true' },
+			function(r) {
+				if (r && r.message) {
+					handleResponse(r.message);
+				} else {
+					hideTypingIndicator();
+					setBusy(false);
+				}
+			},
+			function(err) {
+				hideTypingIndicator();
+				setBusy(false);
+				addMsg('system', errorMessage(err));
+			}
+		);
+	}
+
+	function doCancel() {
+		if (busy) return;
+		setBusy(true);
+		showTypingIndicator();
+		callApi('smart_erp_ai.api.ask', { message: '', session_id: sessionId, cancel: 'true' }, function(r) {
+			if (r && r.message) {
+				handleResponse(r.message);
+			} else {
+				hideTypingIndicator();
+				setBusy(false);
+			}
+		}, function(err) {
+			hideTypingIndicator();
+			setBusy(false);
+			addMsg('system', errorMessage(err));
+		});
+	}
+
+	function errorMessage(err) {
+		var message = err && (err.message || (err.responseJSON && err.responseJSON.exception));
+		return message ? 'Permintaan gagal: ' + message : 'Permintaan gagal. Periksa koneksi lalu coba lagi.';
+	}
+
+	function handleResponse(resp) {
+		hideTypingIndicator();
+		if (resp.session_id) sessionId = resp.session_id;
+		document.querySelectorAll('.confirm-box').forEach(function(box) { box.remove(); });
+
+		if (resp.reply) {
+			addMsg('assistant', resp.reply, resp.tool_calls, function() {
+				if (resp.pending_confirmation) {
+					addConfirmBox(resp.pending_confirmation.description, resp.pending_confirmation);
+				}
+			});
+		} else {
+			setBusy(false);
+			if (resp.pending_confirmation) {
+				addConfirmBox(resp.pending_confirmation.description, resp.pending_confirmation);
+			}
+		}
+	}
+
+	/* — New chat — */
+	function newChat() {
+		if (busy) return;
+		sessionId = null;
+		chatArea.innerHTML = '';
+		var div = document.createElement('div');
+		div.className = 'msg assistant';
+		var content = document.createElement('div');
+		content.className = 'msg-content from-markdown';
+		content.innerHTML = renderMarkdown('Halo! Saya asisten pintar **Smart ERP AI**. Saya dapat membantu menganalisis proses pengadaan (P2P), memeriksa bottleneck, serta mencari dokumen ERPNext. Apa yang bisa saya bantu?');
+		div.appendChild(content);
+		chatArea.appendChild(div);
+		chatArea.scrollTop = chatArea.scrollHeight;
+		msgInput.focus();
+	}
+</script>
+{% endblock %}
