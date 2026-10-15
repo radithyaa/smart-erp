@@ -74,6 +74,11 @@ def get_pending_at_stage(process: str, stage: str) -> list[dict]:
     """Dokumen yang masih tertahan di sebuah tahap (dipakai untuk F7 & reminder).
     Return: [{"case_id": str, "reference": str, "age_hours": float, "owner": str}, ...]
     """
+
+def send_reminder(process: str, stage: str, references: list[str], message: str) -> dict:
+    """Kirim pengingat untuk dokumen tertahan (SRS §9 demo #4). Aksi TULIS.
+    Return: {"sent": int, "recipients": list[str], "references": list[str], "stage": str}
+    """
 ```
 
 **Aturan:** bentuk return tidak berubah tanpa notifikasi Dev A. Perubahan = update dokumen ini.
@@ -84,6 +89,12 @@ def get_pending_at_stage(process: str, stage: str) -> list[dict]:
 > non-breaking seperti `label`, `is_bottleneck`, `stage`, `doctype`).
 > Dev A boleh langsung mendaftarkannya sebagai tool (A6). Lihat
 > `docs/DEV-B-STATUS.md` untuk detail & cara verifikasi.
+>
+> **Tambahan (SRS §9 #4 — kirim reminder):** `send_reminder(process, stage,
+> references, message)` ditambahkan ke kontrak sebagai **aksi tulis** yang
+> dikonsumsi Dev A sebagai tool `send_reminder`. Implementasinya ada di adapter
+> (`ERPNextSource.send_reminder` → `ToDo` + `Smart ERP Reminder Log`), sehingga
+> mekanisme pengiriman tidak bocor ke agent (RULE 2.4 / NFR5).
 
 ---
 

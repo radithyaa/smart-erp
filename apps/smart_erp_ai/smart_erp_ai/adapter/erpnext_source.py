@@ -80,6 +80,88 @@ class ERPNextSource(ERPSource):
 		out.sort(key=lambda r: r["age_hours"], reverse=True)
 		return out
 
+	def send_reminder(self, process: str, stage: str, references: list[str], message: str) -> dict:
+		"""Kirim pengingat untuk dokumen tertahan (SRS §9 demo #4).
+
+		Mekanisme di ERPNext: buat satu dokumen ``ToDo`` per dokumen tertahan,
+		di-assign ke ``owner`` dokumen tersebut, sehingga pengingat muncul sebagai
+		*assignment* di ERPNext Desk. Mekanisme ini dipilih karena **tidak
+		bergantung pada konfigurasi SMTP** (reprodusibel di demo) namun tetap
+		terlihat nyata di dalam ERP (NFR4).
+
+		Setiap pengiriman dicatat di DocType ``Smart ERP Reminder Log``.
+
+		:raises frappe.ValidationError: bila ``references`` kosong.
+		"""
+		if process != self.process_name:
+			frappe.throw(f"Proses tidak didukung: {process}")
+
+		doctype = _STAGE_DOCTYPE.get(stage)
+		if not doctype:
+			frappe.throw(f"Tahap tidak dikenal: {stage}")
+
+		references = [r for r in (references or []) if r]
+		if not references:
+			frappe.throw("Tidak ada dokumen yang dipilih untuk dikirimi pengingat.")
+
+		# Batasi ke dokumen yang benar-benar valid & benar tertahan di tahap ini.
+		pending_by_ref = {row["reference"]: row for row in self.list_pending(process, stage)}
+		valid = [r for r in references if r in pending_by_ref]
+		if not valid:
+			frappe.throw("Dokumen yang dipilih tidak lagi tertahan di tahap ini.")
+
+		message = (message or "").strip() or "Mohon tindak lanjuti dokumen ini."
+		recipients: list[str] = []
+
+		for reference in valid:
+			row = pending_by_ref[reference]
+			recipient = row.get("owner") or "Administrator"
+			if recipient not in recipients:
+				recipients.append(recipient)
+			self._create_todo(reference, doctype, recipient, stage, message)
+			self._log_reminder(stage, reference, recipient, message)
+
+		return {
+			"sent": len(valid),
+			"recipients": recipients,
+			"references": valid,
+			"stage": stage,
+		}
+
+	def _create_todo(self, reference: str, doctype: str, recipient: str, stage: str, message: str) -> None:
+		"""Buat ToDo (assignment) ke owner dokumen sebagai pengingat nyata di ERP."""
+		description = (
+			f"[Smart ERP] Pengingat proses {stage.replace('_', ' ')}: "
+			f"dokumen {reference} ({doctype}) tertahan. {message}"
+		)
+		todo = frappe.get_doc(
+			{
+				"doctype": "ToDo",
+				"description": description,
+				"allocated_to": recipient,
+				"reference_type": doctype,
+				"reference_name": reference,
+				"priority": "High",
+				"status": "Open",
+			}
+		)
+		todo.insert(ignore_permissions=False)
+
+	def _log_reminder(self, stage: str, reference: str, recipient: str, message: str) -> None:
+		"""Catat pengingat ke ``Smart ERP Reminder Log`` (jejak, NFR2)."""
+		if not frappe.db.exists("DocType", "Smart ERP Reminder Log"):
+			return
+		frappe.get_doc(
+			{
+				"doctype": "Smart ERP Reminder Log",
+				"stage": stage,
+				"reference": reference,
+				"recipient": recipient,
+				"message": message,
+				"sent_by": getattr(frappe.session, "user", None) or "Administrator",
+			}
+		).insert(ignore_permissions=True)
+
 
 #: DocType lanjutan per tahap (untuk menilai sebuah dokumen sudah "maju").
 _NEXT_STAGE: dict[str, str] = {

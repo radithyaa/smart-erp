@@ -8,13 +8,28 @@
 {% endblock %}
 
 {% block header_actions %}
+<button class="btn btn-secondary btn-sm" onclick="toggleAnalytics()" id="analytics-toggle-btn">
+	{{ _("Panel Analitik") }}
+</button>
 <button class="btn btn-secondary btn-sm" onclick="newChat()" id="new-chat-btn">
 	{{ _("Sesi Baru") }}
 </button>
 {% endblock %}
 
 {% block style %}
-<style>
+	<style>
+	/* — F4 design tokens (RULE 4.4 — warna terpusat, berbasis variabel Frappe) — */
+	.chat-wrapper,
+	#analytics-panel {
+		--se-accent: var(--primary, #6366f1);
+		--se-accent-soft: var(--primary-light, #eef2ff);
+		--se-danger: var(--red-500, #dc2626);
+		--se-surface: var(--card-bg, #ffffff);
+		--se-surface-alt: var(--fg-color, #f8fafc);
+		--se-border: var(--border-color, #e2e8f0);
+		--se-text: var(--text-color, #1e293b);
+		--se-text-muted: var(--text-muted, #64748b);
+	}
 	.chat-wrapper {
 		max-width: 900px;
 		margin: 0 auto;
@@ -140,6 +155,97 @@
 		margin: 12px 0;
 	}
 
+	/* — F4 analytics panel — */
+	#analytics-panel {
+		max-width: 900px;
+		margin: 0 auto 16px;
+		background: var(--se-surface);
+		border: 1px solid var(--se-border);
+		border-radius: 12px;
+		padding: 16px 20px;
+		box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+	}
+	#analytics-panel[hidden] { display: none; }
+	.analytics-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 12px;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	.analytics-head h2 {
+		font-size: 16px;
+		font-weight: 600;
+		margin: 0;
+		color: var(--se-text);
+	}
+	.analytics-head .period-note {
+		font-size: 12px;
+		color: var(--se-text-muted);
+	}
+	.analytics-summary {
+		font-size: 13px;
+		color: var(--se-text);
+		background: var(--se-accent-soft);
+		border-left: 3px solid var(--se-accent);
+		border-radius: 6px;
+		padding: 8px 12px;
+		margin-bottom: 16px;
+	}
+	.analytics-section-title {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--se-text);
+		margin: 0 0 8px;
+	}
+	.analytics-chart { width: 100%; height: auto; display: block; }
+	.analytics-chart .bar {
+		fill: var(--se-accent);
+	}
+	.analytics-chart .bar.is-bottleneck {
+		fill: var(--se-danger);
+	}
+	.analytics-chart .bar-label {
+		fill: var(--se-text);
+		font-size: 11px;
+	}
+	.analytics-chart .bar-value {
+		fill: var(--se-text-muted);
+		font-size: 11px;
+		font-weight: 600;
+	}
+	.analytics-chart .axis-line {
+		stroke: var(--se-border);
+		stroke-width: 1;
+	}
+	.flow-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-wrap: wrap;
+		margin-top: 8px;
+	}
+	.flow-node {
+		border: 1.5px solid var(--se-accent);
+		border-radius: 8px;
+		padding: 8px 12px;
+		font-size: 12px;
+		color: var(--se-text);
+		background: var(--se-surface);
+		text-align: center;
+		line-height: 1.35;
+	}
+	.flow-node.is-bottleneck {
+		border-color: var(--se-danger);
+		background: var(--se-accent-soft);
+		font-weight: 600;
+	}
+	.flow-node .flow-stage { display: block; font-weight: 600; }
+	.flow-node .flow-dur { display: block; font-size: 11px; color: var(--se-text-muted); }
+	.flow-arrow { color: var(--se-text-muted); font-size: 16px; }
+	.analytics-empty { font-size: 13px; color: var(--se-text-muted); }
+
 	/* — Streaming cursor — */
 	.msg-content.streaming::after {
 		content: '▊';
@@ -260,11 +366,22 @@
 		#input-area { padding: 10px; gap: 8px; }
 		#msg-input { min-width: 0; }
 		#send-btn { padding: 10px 16px; }
+		#analytics-panel { padding: 12px 14px; }
+		.flow-node { padding: 6px 9px; }
 	}
 </style>
 {% endblock %}
 
 {% block page_content %}
+<section id="analytics-panel" hidden aria-label="Analitik proses">
+	<div class="analytics-head">
+		<h2>{{ _("Analitik Proses Purchase-to-Pay") }}</h2>
+		<span class="period-note" id="analytics-period"></span>
+	</div>
+	<div id="analytics-body">
+		<p class="analytics-empty">Memuat analitik&hellip;</p>
+	</div>
+</section>
 <div class="chat-wrapper">
 	<div class="chat-container">
 		{% if is_guest %}
@@ -587,6 +704,170 @@
 				addConfirmBox(resp.pending_confirmation.description, resp.pending_confirmation);
 			}
 		}
+	}
+
+	/* — F4 Analytics panel (grafik batang + diagram alur) — */
+	var analyticsLoaded = false;
+
+	function toggleAnalytics() {
+		var panel = document.getElementById('analytics-panel');
+		if (panel.hidden) {
+			panel.hidden = false;
+			if (!analyticsLoaded) loadAnalytics();
+		} else {
+			panel.hidden = true;
+		}
+	}
+
+	function loadAnalytics() {
+		var body = document.getElementById('analytics-body');
+		callApi(
+			'smart_erp_ai.api.analytics_overview',
+			{ process: 'purchase-to-pay' },
+			function(r) {
+				analyticsLoaded = true;
+				renderAnalytics((r && r.message) || {});
+			},
+			function(err) {
+				body.innerHTML = '';
+				var p = document.createElement('p');
+				p.className = 'analytics-empty';
+				p.textContent = errorMessage(err);
+				body.appendChild(p);
+			}
+		);
+	}
+
+	function renderAnalytics(data) {
+		var body = document.getElementById('analytics-body');
+		body.innerHTML = '';
+
+		var periodNote = document.getElementById('analytics-period');
+		periodNote.textContent = data.period ? '(' + data.period + ')' : '(semua periode)';
+
+		if (data.bottleneck_summary) {
+			var summary = document.createElement('div');
+			summary.className = 'analytics-summary';
+			summary.textContent = data.bottleneck_summary + ' ' + data.rework_count + ' kasus rework/deviasi.';
+			body.appendChild(summary);
+		}
+
+		body.appendChild(renderBarChart(data.bottlenecks || []));
+		body.appendChild(renderFlowDiagram(data.flow));
+	}
+
+	function renderBarChart(rows) {
+		var wrap = document.createElement('div');
+		var title = document.createElement('p');
+		title.className = 'analytics-section-title';
+		title.textContent = 'Durasi rata-rata antar tahap (jam)';
+		wrap.appendChild(title);
+
+		if (!rows.length) {
+			var empty = document.createElement('p');
+			empty.className = 'analytics-empty';
+			empty.textContent = 'Belum ada data. Jalankan seed data terlebih dahulu.';
+			wrap.appendChild(empty);
+			return wrap;
+		}
+
+		var svgNS = 'http://www.w3.org/2000/svg';
+		var width = 600, height = 220;
+		var padLeft = 110, padRight = 20, padTop = 10, padBottom = 20;
+		var chartW = width - padLeft - padRight;
+		var rowH = (height - padTop - padBottom) / rows.length;
+		var barH = Math.min(28, rowH * 0.6);
+		var maxVal = Math.max.apply(null, rows.map(function(r) { return r.avg_duration_hours || 0; })) || 1;
+
+		var svg = document.createElementNS(svgNS, 'svg');
+		svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+		svg.setAttribute('class', 'analytics-chart');
+		svg.setAttribute('role', 'img');
+		svg.setAttribute('aria-label', 'Grafik batang durasi rata-rata antar tahap proses');
+
+		var axis = document.createElementNS(svgNS, 'line');
+		axis.setAttribute('x1', padLeft);
+		axis.setAttribute('y1', padTop);
+		axis.setAttribute('x2', padLeft);
+		axis.setAttribute('y2', height - padBottom);
+		axis.setAttribute('class', 'axis-line');
+		svg.appendChild(axis);
+
+		rows.forEach(function(row, i) {
+			var y = padTop + i * rowH + (rowH - barH) / 2;
+			var val = row.avg_duration_hours || 0;
+			var barW = Math.max(1, (val / maxVal) * chartW);
+
+			var label = document.createElementNS(svgNS, 'text');
+			label.setAttribute('x', padLeft - 8);
+			label.setAttribute('y', y + barH / 2 + 4);
+			label.setAttribute('text-anchor', 'end');
+			label.setAttribute('class', 'bar-label');
+			label.textContent = row.label || row.stage;
+			svg.appendChild(label);
+
+			var bar = document.createElementNS(svgNS, 'rect');
+			bar.setAttribute('x', padLeft);
+			bar.setAttribute('y', y);
+			bar.setAttribute('width', barW);
+			bar.setAttribute('height', barH);
+			bar.setAttribute('rx', 3);
+			bar.setAttribute('class', 'bar' + (row.is_bottleneck ? ' is-bottleneck' : ''));
+			bar.setAttribute('title', (row.label || row.stage) + ': ' + val + ' jam');
+			svg.appendChild(bar);
+
+			var value = document.createElementNS(svgNS, 'text');
+			value.setAttribute('x', padLeft + barW + 6);
+			value.setAttribute('y', y + barH / 2 + 4);
+			value.setAttribute('class', 'bar-value');
+			value.textContent = val + 'j' + (row.is_bottleneck ? ' \u25c0 bottleneck' : '');
+			svg.appendChild(value);
+		});
+
+		wrap.appendChild(svg);
+		return wrap;
+	}
+
+	function renderFlowDiagram(flow) {
+		var wrap = document.createElement('div');
+		var title = document.createElement('p');
+		title.className = 'analytics-section-title';
+		title.style.marginTop = '16px';
+		title.textContent = 'Diagram alur P2P (anotasi bottleneck)';
+		wrap.appendChild(title);
+
+		if (!flow || !flow.nodes || !flow.nodes.length) {
+			var empty = document.createElement('p');
+			empty.className = 'analytics-empty';
+			empty.textContent = 'Diagram alur belum tersedia.';
+			wrap.appendChild(empty);
+			return wrap;
+		}
+
+		var row = document.createElement('div');
+		row.className = 'flow-row';
+		flow.nodes.forEach(function(node, i) {
+			if (i > 0) {
+				var arrow = document.createElement('span');
+				arrow.className = 'flow-arrow';
+				arrow.setAttribute('aria-hidden', 'true');
+				arrow.textContent = '\u2192';
+				row.appendChild(arrow);
+			}
+			var box = document.createElement('div');
+			box.className = 'flow-node' + (node.is_bottleneck ? ' is-bottleneck' : '');
+			var stage = document.createElement('span');
+			stage.className = 'flow-stage';
+			stage.textContent = node.label;
+			var dur = document.createElement('span');
+			dur.className = 'flow-dur';
+			dur.textContent = (node.avg_duration_hours || 0) + ' jam' + (node.is_bottleneck ? ' \u2014 bottleneck' : '');
+			box.appendChild(stage);
+			box.appendChild(dur);
+			row.appendChild(box);
+		});
+		wrap.appendChild(row);
+		return wrap;
 	}
 
 	/* — New chat — */

@@ -74,6 +74,20 @@ def get_pending_at_stage(process: str, stage: str) -> list[dict]:
 	return get_source().list_pending(process, stage)
 
 
+def send_reminder(process: str, stage: str, references: list[str], message: str = "") -> dict:
+	"""Kirim pengingat untuk dokumen tertahan di sebuah tahap (SRS §9 demo #4).
+
+	**Aksi tulis** (dipakai agen di belakang konfirmasi, AGENT-RULES RULE 5.2).
+	Akses ke ERP tetap lewat adapter (RULE 2.4); modul ini hanya menyediakan
+	kontrak agar agent tidak bergantung pada detail ERP.
+
+	:return: dict ``{sent: int, recipients: list[str], references: list[str],
+	    stage: str}``.
+	"""
+	_check_process(process)
+	return get_source().send_reminder(process, stage, references, message)
+
+
 # ---------------------------------------------------------------------------
 # Endpoint whitelisted (dipakai UI Dev C-UI / agent Dev A via HTTP)
 # ---------------------------------------------------------------------------

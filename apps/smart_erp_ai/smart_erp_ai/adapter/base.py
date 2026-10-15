@@ -69,5 +69,20 @@ class ERPSource(ABC):
 		"""
 
 	@abstractmethod
+	def send_reminder(self, process: str, stage: str, references: list[str], message: str) -> dict:
+		"""Kirim pengingat untuk dokumen yang tertahan di sebuah tahap (SRS §9 demo #4).
+
+		Adalah tugas **adapter** untuk memutuskan mekanisme pengiriman pada sistem
+		sumber (mis. ToDo + notifikasi di ERPNext). Analitik & agent tidak tahu
+		detail ini — cukup memanggil method ini (RULE 2.4).
+
+		:param process: nama proses, mis. ``"purchase-to-pay"``.
+		:param stage: tahap proses tempat dokumen tertahan.
+		:param references: daftar nama dokumen yang akan dikirimi pengingat.
+		:param message: isi pesan pengingat dari agen.
+		:return: dict ``{sent: int, recipients: list[str], references: list[str]}``.
+		"""
+
+	@abstractmethod
 	def supported_processes(self) -> list[str]:
 		"""Daftar nama proses yang bisa dilayani adapter ini."""

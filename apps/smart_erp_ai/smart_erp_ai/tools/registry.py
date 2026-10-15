@@ -65,6 +65,18 @@ class GetPendingAtStageArgs(BaseModel):
 	)
 
 
+class SendReminderArgs(BaseModel):
+	process: str = Field(default="purchase-to-pay", description="Process name")
+	stage: str = Field(
+		default="purchase_order",
+		description="Stage where documents are stuck: 'purchase_order', 'purchase_receipt', or 'purchase_invoice'",
+	)
+	references: list[str] = Field(
+		description="List of stuck document names (e.g. ['PO-PUR-2026-0001']) to send the reminder to"
+	)
+	message: str = Field(default="", description="Reminder message body")
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -117,6 +129,12 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
 		"args_schema": GetPendingAtStageArgs,
 		"is_write": False,
 		"description": "Get documents pending at a specific process stage.",
+	},
+	"send_reminder": {
+		"fn": analysis_tools.send_reminder,
+		"args_schema": SendReminderArgs,
+		"is_write": True,
+		"description": "Send a reminder for documents stuck at a process stage. Requires user confirmation.",
 	},
 }
 

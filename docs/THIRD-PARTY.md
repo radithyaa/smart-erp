@@ -14,7 +14,11 @@
 
 | Paket | Versi | Lisensi | Kegunaan | Ditambahkan |
 |---|---|---|---|---|
-| _(belum ada — isi saat menambah dependensi)_ | | | | |
+| `langchain` | `>=0.3,<0.4` | MIT | Orkestrasi agent + tool calling (`agent/loop.py`) | 2026-10 (Dev A) |
+| `langchain-openai` | `>=0.2,<0.3` | MIT | Klien LLM OpenAI-compatible via API eksternal (NFR6) | 2026-10 (Dev A) |
+
+> Keduanya berlisensi **MIT** (bukan AGPL) — aman untuk layanan terpisah sesuai
+> RULE 3.5. Dideklarasikan di `apps/smart_erp_ai/pyproject.toml`.
 
 ## Aset desain (tema/ikon/font) untuk rebranding
 

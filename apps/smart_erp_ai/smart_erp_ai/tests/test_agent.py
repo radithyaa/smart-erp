@@ -67,18 +67,19 @@ class TestRegistryIntegrity(unittest.TestCase):
 	"""Verifikasi struktur TOOL_REGISTRY."""
 
 	def test_all_write_tools_marked(self):
-		write_tools = {"create_document", "update_document", "submit_document"}
+		write_tools = {"create_document", "update_document", "submit_document", "send_reminder"}
 		for name, entry in registry.TOOL_REGISTRY.items():
 			if name in write_tools:
 				self.assertTrue(entry["is_write"], f"{name} should be write tool")
 			else:
 				self.assertFalse(entry["is_write"], f"{name} should be read tool")
 
-	def test_eight_tools_registered(self):
+	def test_nine_tools_registered(self):
 		expected = {
 			"list_documents", "get_document",
 			"create_document", "update_document", "submit_document",
 			"get_bottlenecks", "get_rework_cases", "get_pending_at_stage",
+			"send_reminder",
 		}
 		self.assertEqual(set(registry.TOOL_REGISTRY.keys()), expected)
 
@@ -88,7 +89,7 @@ class TestRegistryIntegrity(unittest.TestCase):
 
 	def test_langchain_tools_count(self):
 		tools = registry.get_langchain_tools()
-		self.assertEqual(len(tools), 8)
+		self.assertEqual(len(tools), 9)
 
 
 class TestFrappeToolsWithMock(unittest.TestCase):
@@ -188,6 +189,25 @@ class TestAnalysisToolsWithMock(unittest.TestCase):
 		result = at.get_pending_at_stage("purchase-to-pay", "purchase_order")
 		self.assertEqual(len(result), 1)
 		mock_api.get_pending_at_stage.assert_called_once()
+
+	@patch("smart_erp_ai.tools.analysis_tools.analysis_api")
+	def test_send_reminder_delegates_to_api(self, mock_api):
+		mock_api.send_reminder.return_value = {"sent": 2, "recipients": ["a@x"]}
+		from smart_erp_ai.tools import analysis_tools as at
+		result = at.send_reminder("purchase-to-pay", "purchase_order", ["PO-1", "PO-2"], "tolong")
+		self.assertEqual(result["sent"], 2)
+		mock_api.send_reminder.assert_called_once_with(
+			"purchase-to-pay", "purchase_order", ["PO-1", "PO-2"], "tolong"
+		)
+
+	@patch("smart_erp_ai.tools.analysis_tools.analysis_api")
+	def test_send_reminder_defaults_empty_references(self, mock_api):
+		mock_api.send_reminder.return_value = {"sent": 0}
+		from smart_erp_ai.tools import analysis_tools as at
+		at.send_reminder("purchase-to-pay", "purchase_order", None, "")
+		mock_api.send_reminder.assert_called_once_with(
+			"purchase-to-pay", "purchase_order", [], ""
+		)
 
 
 class TestAuditLogHelperWithMock(unittest.TestCase):
@@ -377,6 +397,16 @@ class TestDescribeAction(unittest.TestCase):
 		from smart_erp_ai.agent.loop import _describe_action
 		desc = _describe_action("submit_document", {"doctype": "Purchase Order", "name": "PO-001"})
 		self.assertIn("men-submit", desc)
+		self.assertIn("PO-001", desc)
+
+	def test_describe_reminder(self):
+		from smart_erp_ai.agent.loop import _describe_action
+		desc = _describe_action(
+			"send_reminder",
+			{"stage": "purchase_order", "references": ["PO-001", "PO-002"]},
+		)
+		self.assertIn("pengingat", desc)
+		self.assertIn("2 dokumen", desc)
 		self.assertIn("PO-001", desc)
 
 

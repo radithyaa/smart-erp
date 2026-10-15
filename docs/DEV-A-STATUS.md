@@ -9,28 +9,43 @@
 > destruktif (`RULE 5.3`); audit log (`RULE 5.4`); no hardcoded secret (`RULE 5.5`);
 > allowlist DocType (`RULE 5.6`).
 
-## ✅ Status: SEMUA TUGAS DEV A SELESAI
+## ✅ Status: SEMUA TUGAS DEV A SELESAI + F4 & REMINDER
 
-Semua 13 task (A1–A7 + prerequisite DocTypes) terimplementasi, lulus syntax
-check, dan siap untuk pengujian di site hidup.
+Seluruh task (A1–A7 + prerequisite DocTypes) terimplementasi, **42/42 unit test
+lulus** (`bench run-tests`), dan **diverifikasi di site hidup**. Tambahan di iterasi
+ini: **F4 Visualisasi** (panel analitik di UI) dan **fitur kirim reminder**
+(skenario demo SRS §9 #4).
 
 | Task | Req | Status | Lokasi |
 |---|---|---|---|
 | **A4-pre** DocType Audit Log | F8/NFR2 | ✅ | `smart_erp_audit_log/smart_erp_audit_log.json` + `.py` |
 | **A2/A5-pre** DocType Chat Session + Message | F5 | ✅ | `smart_erp_chat_session/`, `smart_erp_chat_message/` |
+| **§9#4-pre** DocType Reminder Log | §9/NFR2 | ✅ | `smart_erp_reminder_log/` |
 | **A1** Tool layer generik | F5 | ✅ | `tools/frappe_tools.py` |
 | **A6** Jembatan analisis→aksi | F7 | ✅ | `tools/analysis_tools.py` |
-| **A1/A6** Registry + schema | F5/F7 | ✅ | `tools/registry.py` |
+| **§9#4** Kirim reminder | §9/F7 | ✅ | `tools/analysis_tools.send_reminder` + adapter `send_reminder` |
+| **A1/A6** Registry + schema (9 tool) | F5/F7 | ✅ | `tools/registry.py` |
 | **A4** Audit log helper | F8/NFR2 | ✅ | `audit.py` |
 | **A2/A5** Session CRUD (DB-backed) | F5 | ✅ | `session.py` |
 | **A2** System prompt | F5 | ✅ | `agent/prompt.py` |
 | **A2** LLM client (LangChain) | F5/NFR6 | ✅ | `agent/llm.py` |
 | **A2/A4** Agent loop + confirmation gate | F5/F8 | ✅ | `agent/loop.py` |
 | **A5** Chat endpoint | F5 | ✅ | `api.py` |
+| **F4** Panel visualisasi (grafik + diagram alur) | F4 | ✅ | `api.py::analytics_overview` + `www/chat.html` |
 | **F5-UI** Chat UI | F5 | ✅ | `www/chat.html` |
 | **A7** Metrik validasi (≥20 commands) | §10/NFR1 | ✅ | `scripts/test-commands.md` |
-| **A1–A8** Unit tests | — | ✅ | `tests/test_agent.py` |
+| **A1–A8** Unit tests (42) | — | ✅ | `tests/test_agent.py` |
 | **Config** pyproject.toml | — | ✅ | `pyproject.toml` (langchain deps) |
+
+### Angka hasil verifikasi site hidup
+
+| Hasil | Angka nyata |
+|---|---|
+| Unit test | **42/42 LULUS** (`bench run-tests`) |
+| F4 bottleneck | Purchase Invoice 37.0j, Purchase Receipt 29.43j (keduanya `is_bottleneck`) |
+| F4 diagram alur | 3 node (PO→PR→PI) dengan anotasi bottleneck |
+| Rework (F3) | 10 kasus terdeteksi di panel |
+| Reminder (§9#4) | 2 dikirim → 2 `ToDo` di Desk + 2 baris `Smart ERP Reminder Log` |
 
 ---
 
@@ -164,19 +179,46 @@ Guardrails:
 
 ### Task 3 — `tools/analysis_tools.py` (A6 — Jembatan Analisis → Aksi)
 
-3 thin wrapper ke `process_intelligence/api.py` (kontrak Dev B):
+4 thin wrapper ke `process_intelligence/api.py` (kontrak Dev B):
 
-| Tool | Delegasi | Return |
-|---|---|---|
-| `get_bottlenecks(process, period)` | `analysis_api.get_bottlenecks()` | `list[dict]` peringkat tahap |
-| `get_rework_cases(process, limit)` | `analysis_api.get_rework_cases()` | `list[dict]` kasus rework/deviasi |
-| `get_pending_at_stage(process, stage)` | `analysis_api.get_pending_at_stage()` | `list[dict]` dokumen tertahan |
+| Tool | Delegasi | Return | Konfirmasi? |
+|---|---|---|---|
+| `get_bottlenecks(process, period)` | `analysis_api.get_bottlenecks()` | `list[dict]` peringkat tahap | Tidak (READ) |
+| `get_rework_cases(process, limit)` | `analysis_api.get_rework_cases()` | `list[dict]` kasus rework/deviasi | Tidak (READ) |
+| `get_pending_at_stage(process, stage)` | `analysis_api.get_pending_at_stage()` | `list[dict]` dokumen tertahan | Tidak (READ) |
+| `send_reminder(process, stage, references, message)` | `analysis_api.send_reminder()` | `dict` ringkasan pengiriman | **Ya (F8/WRITE)** |
 
-Semua READ-only, dieksekusi langsung tanpa konfirmasi.
+`send_reminder` adalah **aksi tulis** (mengirim pengingat ke pemilik dokumen),
+sehingga melewati confirmation gate di `agent/loop.py` dan dicatat di audit log
+(RULE 5.2 & 5.4). Detail mekanisme pengiriman ada di adapter (RULE 2.4).
+
+### Task 3b — Fitur Kirim Reminder (SRS §9 demo #4)
+
+Skenario demo #4 SRS: *"Tampilkan daftar PO yang tertahan di approval **dan
+kirim reminder**."*
+
+**Alur:**
+1. Agen memanggil `get_pending_at_stage` (READ) → daftar dokumen tertahan.
+2. Agen merangkum & meminta konfirmasi (WRITE gata).
+3. Setelah dikonfirmasi, `send_reminder` dipanggil → adapter membuat satu
+   dokumen **`ToDo`** per dokumen tertahan (assignment ke `owner` dokumen),
+   sehingga pengingat **terlihat nyata di ERPNext Desk**.
+4. Setiap pengiriman dicatat di DocType **`Smart ERP Reminder Log`**
+   (stage, reference, recipient, message, sent_by).
+5. Aksi tercatat di `Smart ERP Audit Log` oleh `agent/loop.py` (status `Confirmed`).
+
+**Mengapa `ToDo`, bukan email?** Agar pengingat **tidak bergantung pada
+konfigurasi SMTP** (reprodusibel di demo sesuai NFR4) namun tetap dapat
+diverifikasi di dalam ERP. Mekanisme ini dipilih di **adapter**
+(`ERPNextSource.send_reminder`) — mengganti ke email/WhatsApp di masa depan
+cukup mengubah adapter, tanpa menyentuh agent (RULE 2.4 & NFR5).
+
+**Guardrail:** `references` divalidasi terhadap daftar yang **benar-benar masih
+tertahan**; daftar kosong / dokumen yang sudah maju akan ditolak.
 
 ### Task 4 — `tools/registry.py` (A1/A6 — Registry + Schemas)
 
-- `TOOL_REGISTRY`: dict 8 tool → `{fn, args_schema, is_write, description}`
+- `TOOL_REGISTRY`: dict **9 tool** → `{fn, args_schema, is_write, description}`
 - Setiap tool punya Pydantic `BaseModel` args schema (untuk `StructuredTool`)
 - `get_langchain_tools()`: menghasilkan `list[StructuredTool]` untuk
   `ChatOpenAI.bind_tools()`
@@ -255,7 +297,7 @@ def ask(message="", session_id=None, confirm="false") -> dict
 - First call: `session_id=None` → server buat sesi baru, return `session_id`
 - Subsequent calls: klien kirim `session_id` yang sama
 
-### Task 10 — `www/chat.html` (Chat UI)
+### Task 10 — `www/chat.html` (Chat UI + Panel Visualisasi F4)
 
 - Single-page HTML dengan embedded JS/CSS
 - Chat bubble area (user/assistant/tool/system)
@@ -265,31 +307,51 @@ def ask(message="", session_id=None, confirm="false") -> dict
 - Accessible at `http://erpnext.localhost:8080/chat`
 - Calls `frappe.call("smart_erp_ai.api.ask", {message, session_id, confirm})`
 
+**Panel Analitik (F4)** — tombol "Panel Analitik" di header membuka panel yang
+memanggil `smart_erp_ai.api.analytics_overview` dan merender:
+1. **Grafik batang SVG** durasi rata-rata antar tahap proses (F2); tahap di atas
+   threshold diberi warna berbeda (bottleneck).
+2. **Diagram alur beranotasi** P2P (PO → PR → PI) dengan tanda bottleneck (F4).
+3. Ringkasan tahap terlama + jumlah rework/deviasi (F3).
+
+Panel dirancang rapi untuk **screenshot bersih** (bukti Prototype Alpha, SRS §4.1
+F4 & §12). Warna memakai **CSS variables Frappe** (`--primary`, `--text-color`,
+dst.) dengan token terpusat di `#analytics-panel`/`.chat-wrapper` (RULE 4.4),
+bukan hex tersebar.
+
 ### Task 12 — `tests/test_agent.py` (Unit Tests)
 
-25+ test cases dalam 8 test class:
+**42** test case dalam 8 test class (½ diverifikasi: `bench run-tests` → OK):
 
 | Test Class | Cakupan | Butuh Frappe? |
 |---|---|---|
 | `TestAllowlist` | DocType di luar allowlist ditolak | Tidak |
 | `TestBlockedActions` | Tidak ada delete/cancel/amend di registry | Tidak |
-| `TestRegistryIntegrity` | 8 tool terdaftar, write/read flag benar | Tidak |
+| `TestRegistryIntegrity` | 9 tool terdaftar, write/read flag benar | Tidak |
 | `TestFrappeToolsWithMock` | list/get/create/update/submit dengan mock | Mock |
-| `TestAnalysisToolsWithMock` | 3 analysis tool dengan mock | Mock |
+| `TestAnalysisToolsWithMock` | 4 analysis tool (termasuk `send_reminder`) dengan mock | Mock |
 | `TestAuditLogHelperWithMock` | log_action + truncation | Mock |
 | `TestSessionWithMock` | CRUD + pending action + truncation | Mock |
 | `TestLoopConfirmationGate` | Write tool marked, MAX_ITERATIONS=6 | Tidak |
-| `TestDescribeAction` | Deskripsi aksi tulis | Tidak |
+| `TestDescribeAction` | Deskripsi aksi tulis (termasuk reminder) | Tidak |
 
 ### Task 13 — `scripts/test-commands.md` (A7 — Metrik Validasi)
 
-20 test command dalam 4 kategori:
+21 test command dalam 4 kategori:
 1. Basic document queries (1–5)
 2. Create/submit flow (6–10)
 3. Analysis queries (11–15)
-4. Bridge/guardrail queries (16–20)
+4. Bridge/guardrail + reminder queries (16–21)
 
 Target: success rate ≥80%, latency <10s per tool call.
+
+### Task 14 — `api.py::analytics_overview` + `scripts/verify_f4_reminder.py` (F4 & Demo #4)
+
+- Endpoint tipis `analytics_overview(process, period)` melayani panel F4 di UI,
+  menggabungkan F2 (bottleneck) + F3 (rework) + diagram alur. Perhitungan tetap di
+  `process_intelligence` (RULE 2.2).
+- `scripts/verify_f4_reminder.py::run()` — helper verifikasi cepat di site hidup
+  (bukan bagian alur demo), memanggil endpoint F4 + `send_reminder`.
 
 ---
 
@@ -366,7 +428,10 @@ bench --site erpnext.localhost execute frappe.client.get_list \
 |---|---|---|
 | **F5** Agent + tool layer | `agent/`, `tools/`, `api.py` | Chat UI `/chat`, `ask()` endpoint |
 | **F6** Alur P2P end-to-end | `frappe_tools.py` create/submit + confirmation gate | "buat PO" → konfirmasi → PO nyata di Desk |
+| **F2/F3** Analysis queries | `tools/analysis_tools.py` (READ) | "bottleneck?", "rework?" |
+| **F4** Visualisasi | `api.py::analytics_overview` + panel di `www/chat.html` | Grafik batang + diagram alur di `/chat` |
 | **F7** Jembatan analisis→aksi | `analysis_tools.py` + prompt guidance | "bottleneck?" → analitik → tawaran "PO tertahan?" |
+| **§9 #4** Kirim reminder | `tools/analysis_tools.send_reminder` → adapter `ToDo` + `Smart ERP Reminder Log` | "kirim reminder" → konfirmasi → ToDo di Desk |
 | **F8** Guardrail + audit | `frappe_tools.py` (no delete/cancel), `loop.py` (confirmation gate), `audit.py` | Audit log records, confirmation flow |
 | **NFR1** Respons <10s | LLM timeout=30s, MAX_ITERATIONS=6 | `scripts/test-commands.md` |
 | **NFR2** Auditable | `audit.py` → Audit Log DocType | Setiap tool call tercatat dengan session_id |

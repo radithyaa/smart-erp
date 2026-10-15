@@ -38,3 +38,24 @@ def get_pending_at_stage(process: str = "purchase-to-pay", stage: str = "purchas
 	:return: daftar dict ``{case_id, reference, age_hours, owner}``.
 	"""
 	return analysis_api.get_pending_at_stage(process, stage)
+
+
+def send_reminder(
+	process: str = "purchase-to-pay",
+	stage: str = "purchase_order",
+	references: list[str] | None = None,
+	message: str = "",
+) -> dict:
+	"""Kirim pengingat untuk dokumen tertahan (SRS §9 demo #4).
+
+	**Aksi tulis** — dijalankan agen hanya setelah konfirmasi pengguna (RULE 5.2)
+	dan dicatat di audit log (RULE 5.4). Detail pengiriman ada di adapter; modul
+	ini hanya meneruskan kontrak analitik (RULE 2.2 & 2.4).
+
+	:param process: nama proses.
+	:param stage: tahap tempat dokumen tertahan.
+	:param references: daftar nama dokumen yang akan dikirimi pengingat.
+	:param message: isi pesan pengingat.
+	:return: dict ``{sent, recipients, references, stage}``.
+	"""
+	return analysis_api.send_reminder(process, stage, references or [], message)

@@ -33,6 +33,11 @@ def _describe_action(tool_name: str, args: dict) -> str:
 		return f"memperbarui {doctype} {name} dengan data: {json.dumps(args.get('data', {}), ensure_ascii=False)}"
 	elif tool_name == "submit_document":
 		return f"men-submit/menyetujui {doctype} {name}"
+	elif tool_name == "send_reminder":
+		refs = args.get("references", [])
+		stage = args.get("stage", "")
+		refs_text = ", ".join(refs) if refs else "-"
+		return f"mengirim pengingat untuk {len(refs)} dokumen di tahap {stage} ({refs_text})"
 	return f"menjalankan {tool_name} pada {doctype}"
 
 

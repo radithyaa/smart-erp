@@ -32,7 +32,7 @@
 | 14 | "tampilkan PO yang tertahan approval" | `get_pending_at_stage` | List of pending POs with age_hours |
 | 15 | "ada berapa dokumen tertahan di tahap Purchase Receipt?" | `get_pending_at_stage` | Count + list pending at PR stage |
 
-## 16–20: Bridge / Guardrail Queries
+## 16–21: Bridge / Guardrail / Reminder Queries
 
 | # | Command | Expected Tool | Expected Outcome |
 |---|---------|---------------|------------------|
@@ -41,6 +41,17 @@
 | 18 | "tampilkan invoice tertahan" | `get_pending_at_stage` | List pending at PI stage |
 | 19 | "buat Sales Invoice baru" | (none) | Rejected — DocType not in allowlist |
 | 20 | "ringkasan status proses P2P" | `get_bottlenecks` + `get_pending_at_stage` | Multi-tool answer: bottleneck + pending summary |
+| 21 | "tampilkan PO tertahan lalu kirim reminder" | `get_pending_at_stage` → `send_reminder` | Pending list → confirm → ToDo created in Desk |
+
+## F4 — Panel Visualisasi (bukan command chat)
+
+Buka `/chat` → klik **Panel Analitik**. Diharapkan tampil:
+1. Grafik batang durasi rata-rata antar tahap (tahap bottleneck berwarna berbeda).
+2. Diagram alur P2P beranotasi bottleneck.
+3. Ringkasan tahap terlama + jumlah rework/deviasi.
+
+Bukti: screenshot bersih panel (Prototype Alpha, SRS §12). Data dari endpoint
+`smart_erp_ai.api.analytics_overview`.
 
 ## Validation Protocol
 
@@ -56,8 +67,8 @@
 
 | Metric | Value | Target | Status |
 |--------|-------|--------|--------|
-| Total Commands | 20 | 20 | — |
-| Passed | — | ≥16 | — |
+| Total Commands | 21 | ≥20 | — |
+| Passed | — | ≥17 | — |
 | Failed | — | ≤4 | — |
 | Success Rate | —% | ≥80% | — |
 | Avg Latency | —s | <10s | — |
