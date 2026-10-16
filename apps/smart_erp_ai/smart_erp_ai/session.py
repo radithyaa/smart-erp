@@ -57,19 +57,32 @@ def get_or_create_session(session_id: str | None = None) -> str:
 def load_messages(session_id: str) -> list[dict]:
 	"""Muat semua pesan dari sesi sebagai daftar dict.
 
-	:return: daftar ``{role, content, tool_calls, tool_call_id}``,
-	    terurut kronologis.
+	:return: daftar ``{role, content, tool_calls, additional_kwargs,
+	    tool_call_id}``, terurut kronologis.
 	"""
 	doc = _get_session_doc(session_id)
-	return [
-		{
-			"role": m.role,
-			"content": m.content or "",
-			"tool_calls": json.loads(m.tool_calls) if m.tool_calls else None,
-			"tool_call_id": m.tool_call_id or None,
-		}
-		for m in doc.messages
-	]
+	result: list[dict] = []
+	for m in doc.messages:
+		raw = json.loads(m.tool_calls) if m.tool_calls else None
+		if isinstance(raw, dict):
+			tc = raw.get("calls", [])
+			ak = raw.get("additional_kwargs", {})
+		elif isinstance(raw, list):
+			tc = raw
+			ak = None
+		else:
+			tc = None
+			ak = None
+		result.append(
+			{
+				"role": m.role,
+				"content": m.content or "",
+				"tool_calls": tc,
+				"additional_kwargs": ak,
+				"tool_call_id": m.tool_call_id or None,
+			}
+		)
+	return result
 
 
 def append_message(
@@ -78,15 +91,29 @@ def append_message(
 	content: str,
 	tool_calls: list | None = None,
 	tool_call_id: str | None = None,
+	additional_kwargs: dict | None = None,
 ) -> None:
-	"""Tambah satu pesan ke child table sesi dan simpan."""
+	"""Tambah satu pesan ke child table sesi dan simpan.
+
+	:param additional_kwargs: metadata tambahan (mis. thought_signatures
+	    untuk Gemini) yang harus disertakan saat replay pesan ke LLM.
+	"""
 	doc = _get_session_doc(session_id)
+	if tool_calls or additional_kwargs:
+		stored = json.dumps(
+			{
+				"calls": tool_calls or [],
+				"additional_kwargs": additional_kwargs or {},
+			}
+		)
+	else:
+		stored = ""
 	doc.append(
 		"messages",
 		{
 			"role": role,
 			"content": content,
-			"tool_calls": json.dumps(tool_calls) if tool_calls else "",
+			"tool_calls": stored,
 			"tool_call_id": tool_call_id or "",
 		},
 	)
@@ -125,7 +152,19 @@ def get_history_for_llm(session_id: str, max_messages: int = DEFAULT_MAX_MESSAGE
 		if m["role"] == "user":
 			messages.append(HumanMessage(content=m["content"]))
 		elif m["role"] == "assistant":
-			messages.append(AIMessage(content=m["content"], tool_calls=m["tool_calls"] or []))
+			messages.append(
+				AIMessage(
+					content=m["content"],
+					tool_calls=m["tool_calls"] or [],
+					additional_kwargs=m.get("additional_kwargs") or {},
+				)
+			)
 		elif m["role"] == "tool":
-			messages.append(ToolMessage(content=m["content"], tool_call_id=m["tool_call_id"] or ""))
+			messages.append(
+				ToolMessage(
+					content=m["content"],
+					tool_call_id=m["tool_call_id"] or "",
+					additional_kwargs=m.get("additional_kwargs") or {},
+				)
+			)
 	return messages

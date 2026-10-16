@@ -34,10 +34,19 @@ def ask(
 		return {"session_id": sid, "reply": "Aksi dibatalkan.", "tool_calls": [], "pending_confirmation": None}
 	confirm_bool = confirm.lower() == "true"
 
-	result = loop.run_agent(
-		session_id=sid,
-		message=message,
-		confirm=confirm_bool,
-	)
+	try:
+		result = loop.run_agent(
+			session_id=sid,
+			message=message,
+			confirm=confirm_bool,
+		)
+	except Exception:
+		frappe.log_error(title="Smart ERP AI — Agent Error")
+		return {
+			"session_id": sid,
+			"reply": "AI sedang galat, silakan coba lagi.",
+			"tool_calls": [],
+			"pending_confirmation": None,
+		}
 	result["session_id"] = sid
 	return result
