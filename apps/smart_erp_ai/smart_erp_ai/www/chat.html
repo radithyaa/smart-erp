@@ -199,6 +199,11 @@
 		font-size: 14px;
 		outline: none;
 		transition: border-color 0.2s;
+		resize: none;
+		max-height: 120px;
+		overflow-y: auto;
+		line-height: 1.5;
+		font-family: inherit;
 	}
 	#msg-input:focus {
 		border-color: #6366f1;
@@ -281,7 +286,7 @@
 			</div>
 		</div>
 		<form id="input-area">
-			<input type="text" id="msg-input" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan" required>
+			<textarea id="msg-input" placeholder="Ketik pesan... (Shift+Enter untuk baris baru)" autocomplete="off" aria-label="Pesan" rows="1" required></textarea>
 			<button type="submit" id="send-btn">Kirim</button>
 		</form>
 	</div>
@@ -304,6 +309,18 @@
 	document.getElementById('input-area').addEventListener('submit', function(event) {
 		event.preventDefault();
 		send();
+	});
+
+	msgInput.addEventListener('keydown', function(event) {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			send();
+		}
+	});
+
+	msgInput.addEventListener('input', function() {
+		this.style.height = 'auto';
+		this.style.height = Math.min(this.scrollHeight, 120) + 'px';
 	});
 
 	/* — Markdown rendering — */
@@ -502,6 +519,7 @@
 		var msg = msgInput.value.trim();
 		if (!msg) return;
 		msgInput.value = '';
+		msgInput.style.height = 'auto';
 		addMsg('user', msg);
 		setBusy(true);
 		showTypingIndicator();
@@ -566,8 +584,7 @@
 	}
 
 	function errorMessage(err) {
-		var message = err && (err.message || (err.responseJSON && err.responseJSON.exception));
-		return message ? 'Permintaan gagal: ' + message : 'Permintaan gagal. Periksa koneksi lalu coba lagi.';
+		return 'AI sedang galat, silakan coba lagi.';
 	}
 
 	function handleResponse(resp) {

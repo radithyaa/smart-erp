@@ -23,14 +23,19 @@ from smart_erp_ai.tools import registry
 MAX_ITERATIONS = 6
 
 
+def _dumps(obj: object) -> str:
+	"""``json.dumps`` dengan ``default=str`` untuk handle datetime/Decimal."""
+	return json.dumps(obj, default=str, ensure_ascii=False)
+
+
 def _describe_action(tool_name: str, args: dict) -> str:
 	"""Hasilkan deskripsi ramah-pengguna untuk aksi tulis."""
 	doctype = args.get("doctype", "")
 	name = args.get("name", "")
 	if tool_name == "create_document":
-		return f"membuat {doctype} baru dengan data: {json.dumps(args.get('data', {}), ensure_ascii=False)}"
+		return f"membuat {doctype} baru dengan data: {_dumps(args.get('data', {}))}"
 	elif tool_name == "update_document":
-		return f"memperbarui {doctype} {name} dengan data: {json.dumps(args.get('data', {}), ensure_ascii=False)}"
+		return f"memperbarui {doctype} {name} dengan data: {_dumps(args.get('data', {}))}"
 	elif tool_name == "submit_document":
 		return f"men-submit/menyetujui {doctype} {name}"
 	return f"menjalankan {tool_name} pada {doctype}"
@@ -80,9 +85,16 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 			"Confirmed",
 			session_id=session_id,
 		)
+		# Ambil thought_signature dari pending action (disimpan saat WRITE path)
+		pending_ak = pending.get("additional_kwargs") or {}
+		pending_sigs = pending_ak.get("thought_signatures", [])
+		tc_sig = pending_sigs[0] if pending_sigs else None
+		tool_ak = {"thought_signature": tc_sig} if tc_sig else None
+
 		session.append_message(
-			session_id, "tool", json.dumps(result),
+			session_id, "tool", _dumps(result),
 			tool_call_id=pending.get("tool_call_id"),
+			additional_kwargs=tool_ak,
 		)
 		session.set_pending_action(session_id, None)
 
@@ -90,8 +102,9 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 		messages = _build_llm_messages(session_id)
 		messages.append(
 			ToolMessage(
-				content=json.dumps(result),
+				content=_dumps(result),
 				tool_call_id=pending.get("tool_call_id") or "",
+				additional_kwargs=tool_ak or {},
 			)
 		)
 		llm = llm_module.get_llm().bind_tools(registry.get_langchain_tools())
@@ -125,10 +138,21 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 				"pending_confirmation": None,
 			}
 
-		for tool_call in response.tool_calls:
+		# Tambahkan response sekali per iterasi (bukan per tool call)
+		messages.append(response)
+
+		response_ak = response.additional_kwargs or {}
+		thought_sigs = response_ak.get("thought_signatures", [])
+
+		for tc_idx, tool_call in enumerate(response.tool_calls):
 			tool_name = tool_call["name"]
 			tool_args = tool_call["args"]
 			tool_entry = registry.get_tool(tool_name)
+
+			# Ambil thought_signature untuk tool call ini
+			tc_sig = thought_sigs[tc_idx] if tc_idx < len(thought_sigs) else None
+			ai_ak = {"thought_signatures": [tc_sig]} if tc_sig else response_ak
+			tool_ak = {"thought_signature": tc_sig} if tc_sig else None
 
 			if tool_entry["is_write"]:
 				# WRITE — jeda: simpan pending action, minta konfirmasi
@@ -137,6 +161,7 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 					"args": tool_args,
 					"description": _describe_action(tool_name, tool_args),
 					"tool_call_id": tool_call["id"],
+					"additional_kwargs": ai_ak,
 				}
 				session.set_pending_action(session_id, pending_action)
 				session.append_message(
@@ -144,6 +169,7 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 					"assistant",
 					f"Saya akan {pending_action['description']}. Lanjutkan?",
 					tool_calls=[{"name": tool_name, "args": tool_args, "id": tool_call["id"]}],
+					additional_kwargs=ai_ak,
 				)
 				return {
 					"reply": f"Saya akan {pending_action['description']}. Lanjutkan?",
@@ -175,18 +201,20 @@ def run_agent(session_id: str, message: str, confirm: bool = False) -> dict:
 					"assistant",
 					"",
 					tool_calls=[{"name": tool_name, "args": tool_args, "id": tool_call["id"]}],
+					additional_kwargs=ai_ak,
 				)
 				session.append_message(
 					session_id,
 					"tool",
-					json.dumps(result),
+					_dumps(result),
 					tool_call_id=tool_call["id"],
+					additional_kwargs=tool_ak,
 				)
-				messages.append(response)
 				messages.append(
 					ToolMessage(
-						content=json.dumps(result),
+						content=_dumps(result),
 						tool_call_id=tool_call["id"],
+						additional_kwargs=tool_ak or {},
 					)
 				)
 
